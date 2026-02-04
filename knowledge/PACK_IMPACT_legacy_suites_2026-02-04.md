@@ -1,7 +1,7 @@
 # Pack Impact Report: Legacy Test Suite Knowledge Extraction
 
 **Date:** 2026-02-04  
-**Knowledge Artifact:** `knowledge/learned/legacy_suites_extended_2026-02-04.json`
+**Knowledge Artifact:** `knowledge/learned/extraction_2026-02-04_cdn_edge_proxy.json`
 
 ---
 
