@@ -23,11 +23,11 @@ from rich.table import Table
 from rich.tree import Tree
 
 from prevent_outage_edge_testing import __version__
-from prevent_outage_edge_testing.cli.commands import build, init, learn, packs, gate
+from prevent_outage_edge_testing.cli.commands import build, init, learn, packs, gate, obligations
 
 app = typer.Typer(
     name="poet",
-    help="POET - Prevent Outage Edge Testing: Knowledge packs and test plan builder",
+    help="POET - Portable Obligation Evidence Testing",
     no_args_is_help=True,
     rich_markup_mode="rich",
 )
@@ -37,6 +37,7 @@ console = Console()
 app.add_typer(packs.app, name="packs", help="Manage knowledge packs")
 app.add_typer(learn.learn_app, name="learn", help="Learn patterns from existing tests")
 app.add_typer(gate.app, name="gate", help="Run release gates and generate reports")
+app.add_typer(obligations.obligations_app, name="obligations", help="Browse and inspect obligations")
 app.command("init")(init.init_command)
 app.command("build")(build.build_command)
 

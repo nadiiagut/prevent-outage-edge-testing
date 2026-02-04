@@ -80,5 +80,8 @@ Thumbs.db
 
 # Project specific
 generated_tests/
-*.json
-!src/prevent_outage_edge_testing/packs/*.json
+.poet/
+knowledge/learned/*.json
+
+# Allow example JSON files
+!examples/*.json

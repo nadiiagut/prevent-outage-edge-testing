@@ -1,0 +1,184 @@
+{
+  "report_id": "gate-2026-02-04-143022",
+  "timestamp": "2026-02-04T14:30:22Z",
+  "duration_ms": 4523,
+  "overall_status": "PASSED",
+  "summary": {
+    "gates_passed": 5,
+    "gates_failed": 0,
+    "checks_passed": 18,
+    "checks_skipped": 5,
+    "checks_failed": 0
+  },
+  "gates": [
+    {
+      "id": "contract",
+      "name": "Contract Gate",
+      "status": "PASSED",
+      "duration_ms": 892,
+      "checks": [
+        {
+          "name": "HTTP Status Codes",
+          "status": "PASSED",
+          "tests_run": 12,
+          "tests_passed": 12,
+          "evidence": [
+            "logs/access.log",
+            "captures/status_codes.json"
+          ]
+        },
+        {
+          "name": "Required Headers",
+          "status": "PASSED",
+          "tests_run": 8,
+          "tests_passed": 8
+        },
+        {
+          "name": "Response Schema",
+          "status": "SKIPPED",
+          "reason": "No schema tests configured"
+        }
+      ]
+    },
+    {
+      "id": "cache",
+      "name": "Cache Correctness Gate",
+      "status": "PASSED",
+      "duration_ms": 1205,
+      "checks": [
+        {
+          "name": "Cache Hit/Miss Accuracy",
+          "status": "PASSED",
+          "tests_run": 6,
+          "tests_passed": 6,
+          "metrics": {
+            "hit_ratio": 0.847,
+            "expected_min": 0.80
+          }
+        },
+        {
+          "name": "Vary Header Handling",
+          "status": "PASSED",
+          "tests_run": 4,
+          "tests_passed": 4
+        },
+        {
+          "name": "TTL Expiration",
+          "status": "PASSED",
+          "tests_run": 3,
+          "tests_passed": 3
+        }
+      ]
+    },
+    {
+      "id": "perf",
+      "name": "Performance Budget Gate",
+      "status": "PASSED",
+      "duration_ms": 1834,
+      "checks": [
+        {
+          "name": "P95 Latency Budget",
+          "status": "PASSED",
+          "metrics": {
+            "p95_ms": 42,
+            "budget_ms": 100,
+            "headroom_pct": 58
+          }
+        },
+        {
+          "name": "P99 Latency Budget",
+          "status": "PASSED",
+          "metrics": {
+            "p99_ms": 87,
+            "budget_ms": 200,
+            "headroom_pct": 56.5
+          }
+        },
+        {
+          "name": "Throughput Minimum",
+          "status": "SKIPPED",
+          "reason": "Load test not configured"
+        }
+      ]
+    },
+    {
+      "id": "failure",
+      "name": "Failure Mode Gate",
+      "status": "PASSED",
+      "duration_ms": 423,
+      "checks": [
+        {
+          "name": "Timeout Handling",
+          "status": "PASSED",
+          "tests_run": 2,
+          "tests_passed": 2
+        },
+        {
+          "name": "Retry Logic",
+          "status": "PASSED",
+          "tests_run": 3,
+          "tests_passed": 3
+        },
+        {
+          "name": "Circuit Breaker",
+          "status": "SKIPPED",
+          "reason": "Circuit breaker not enabled"
+        }
+      ]
+    },
+    {
+      "id": "observability",
+      "name": "Observability Gate",
+      "status": "PASSED",
+      "duration_ms": 169,
+      "checks": [
+        {
+          "name": "Structured Logging",
+          "status": "PASSED",
+          "tests_run": 1,
+          "tests_passed": 1
+        },
+        {
+          "name": "Metrics Exposed",
+          "status": "PASSED",
+          "tests_run": 1,
+          "tests_passed": 1,
+          "evidence": [
+            "metrics/prometheus_scrape.txt"
+          ]
+        },
+        {
+          "name": "Health Endpoints",
+          "status": "PASSED",
+          "tests_run": 1,
+          "tests_passed": 1
+        }
+      ]
+    }
+  ],
+  "obligations_covered": [
+    "routing.backend.selection",
+    "cache.key.stability",
+    "cache.vary.honored",
+    "protocol.http.status",
+    "resilience.timeout.enforced",
+    "resilience.retry.bounded",
+    "observability.access.logged",
+    "observability.metrics.exposed"
+  ],
+  "obligations_not_covered": [
+    "security.tls.chain.valid",
+    "security.mtls.client.verified",
+    "state.config.reload.atomic"
+  ],
+  "coverage": {
+    "obligations_total": 11,
+    "obligations_covered": 8,
+    "coverage_pct": 72.7
+  },
+  "evidence_path": ".poet/evidence/gate-2026-02-04-143022/",
+  "reports": {
+    "json": ".poet/reports/2026-02-04-143022.json",
+    "html": ".poet/reports/latest.html"
+  }
+}
