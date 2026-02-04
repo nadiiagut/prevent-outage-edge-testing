@@ -1,0 +1,37 @@
+id: cache.vary.honored
+title: Vary Header Honored
+description: >
+  Cached responses with Vary headers must only be served when the
+  specified request headers match. Serving mismatched Vary responses
+  causes content corruption (e.g., gzip to non-gzip client).
+risk: high
+safe_in_prod: true
+
+required_signals:
+  - Vary header in cached response
+  - Request headers matching Vary fields
+  - Cache hit/miss indicator
+  - Response body encoding
+
+pass_criteria:
+  - Different Accept-Encoding values get different cached variants
+  - Vary: Cookie prevents cross-user cache pollution
+  - Missing Vary header on request treated as distinct variant
+
+suggested_checks:
+  - name: accept_encoding_vary
+    method: http
+
+  - name: vary_cookie_isolation
+    method: http
+
+  - name: vary_miss_on_new_value
+    method: headers
+
+
+evidence_to_capture:
+  - Vary header from origin response
+  - Request headers for Vary fields
+  - Cache key variant identifier
+  - Response Content-Encoding
+

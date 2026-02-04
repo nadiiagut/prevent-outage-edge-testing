@@ -1,0 +1,38 @@
+id: observability.metrics.exposed
+title: Metrics Endpoint Available
+description: >
+  A metrics endpoint (e.g., /metrics for Prometheus) must expose current
+  counters, gauges, and histograms. Metrics must match internal state
+  and update in near-real-time.
+risk: medium
+safe_in_prod: true
+
+required_signals:
+  - Metrics endpoint response
+  - Internal counter values
+  - Request/error counts
+  - Connection pool state
+
+pass_criteria:
+  - Metrics endpoint returns 200 with valid format
+  - Request counters increment with traffic
+  - Error counters match actual errors
+  - Metrics update within scrape interval
+
+suggested_checks:
+  - name: metrics_endpoint_available
+    method: http
+
+  - name: counter_accuracy
+    method: metrics
+
+  - name: error_counter_accuracy
+    method: metrics
+
+
+evidence_to_capture:
+  - Full metrics endpoint response
+  - Counter values before and after test
+  - Metric label cardinality
+  - Scrape latency
+

@@ -1,0 +1,42 @@
+id: state.ratelimit.enforced
+title: Rate Limits Enforced
+description: >
+  Rate limits (per-IP, per-user, per-endpoint) must be enforced within
+  configured tolerance. Limits must be consistent across proxy instances
+  in distributed deployments.
+risk: high
+safe_in_prod: false
+
+assumptions:
+  - Rate limiting is configured
+  - State synchronization exists for distributed deployment
+
+required_signals:
+  - Rate limit counter value
+  - Request acceptance/rejection decisions
+  - Rate limit configuration
+  - Counter sync status (distributed)
+
+pass_criteria:
+  - Requests exceeding limit receive 429 Too Many Requests
+  - Limit enforced within ±10% tolerance
+  - Distributed counters synchronized within window
+  - Rate limit key correctly identifies client
+
+suggested_checks:
+  - name: rate_limit_enforcement
+    method: http
+
+  - name: distributed_consistency
+    method: http
+
+  - name: limit_reset
+    method: http
+
+
+evidence_to_capture:
+  - Rate limit counter value
+  - Request timestamps and accept/reject status
+  - Rate limit key used
+  - 429 response details
+

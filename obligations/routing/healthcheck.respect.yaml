@@ -1,0 +1,40 @@
+id: routing.healthcheck.respect
+title: Unhealthy Backends Not Selected
+description: >
+  Backends marked unhealthy by health checks must not receive production
+  traffic. Traffic should only resume after the backend passes health
+  checks again.
+risk: high
+safe_in_prod: false
+
+assumptions:
+  - Health check endpoint exists and is configured
+  - Backend pool has multiple servers for failover
+
+required_signals:
+  - Health check pass/fail status per backend
+  - Backend selection decisions in routing layer
+  - Health check configuration (interval, threshold)
+
+pass_criteria:
+  - Zero requests to backends in "unhealthy" state
+  - Health state change propagates within 2x check interval
+  - Recovered backend receives traffic after passing threshold checks
+
+suggested_checks:
+  - name: unhealthy_backend_bypass
+    method: http
+
+  - name: health_propagation_latency
+    method: metrics
+
+  - name: recovery_traffic_resume
+    method: http
+
+
+evidence_to_capture:
+  - Health check results with timestamps
+  - Backend state transitions (healthy → unhealthy → healthy)
+  - Request routing decisions during transition
+  - Any requests that reached unhealthy backend
+

@@ -1,0 +1,336 @@
+# pack.yaml - fault-injection-io
+# Knowledge pack for I/O fault injection using LD_PRELOAD and fallbacks.
+#
+# Enables chaos engineering for disk/network I/O without kernel modifications.
+
+id: fault-injection-io
+name: Fault Injection for I/O Operations
+version: "1.0.0"
+description: |
+  Tools and tests for injecting I/O faults to validate error handling.
+  Uses LD_PRELOAD interposition on Linux/macOS with safe simulator fallbacks.
+  
+  Fault types supported:
+  - Disk I/O errors (EIO, ENOSPC, EROFS)
+  - Network failures (connection reset, timeout)
+  - Latency injection
+  - Partial reads/writes
+  
+  This pack does NOT require kernel modifications or root access for basic usage.
+author: Edge Reliability Team
+tags:
+  - fault-injection
+  - chaos
+  - io
+  - ld_preload
+  - resilience
+  - error-handling
+
+failure_modes:
+  - id: disk-io-error-unhandled
+    name: Unhandled Disk I/O Error
+    description: |
+      Application crashes or corrupts data when disk returns EIO error.
+    severity: critical
+    symptoms:
+      - Application crash on write failure
+      - Silent data loss
+      - Inconsistent state after recovery
+      - No error logging for I/O failures
+    root_causes:
+      - Missing error check after write()
+      - Assuming fsync() always succeeds
+      - No retry logic for transient errors
+      - Incorrect errno handling
+    mitigation_strategies:
+      - Check return value of ALL I/O operations
+      - Implement retry with exponential backoff
+      - Use write-ahead logging for critical data
+      - Test with fault injection regularly
+    tags:
+      - disk
+      - error-handling
+      - data-integrity
+
+  - id: disk-full-graceful
+    name: Disk Full Not Handled Gracefully
+    description: |
+      Application fails catastrophically when disk space is exhausted (ENOSPC).
+    severity: high
+    symptoms:
+      - Service becomes unavailable
+      - Partial writes corrupt files
+      - Log rotation fails silently
+      - Database corruption
+    root_causes:
+      - No disk space monitoring
+      - Missing ENOSPC handling
+      - Unbounded log growth
+      - No cleanup of temporary files
+    mitigation_strategies:
+      - Monitor disk usage with alerts at 80%/90%
+      - Handle ENOSPC gracefully (queue to memory, reject new requests)
+      - Implement log rotation and retention policies
+      - Pre-allocate space for critical operations
+    tags:
+      - disk
+      - capacity
+      - enospc
+
+  - id: network-timeout-cascade
+    name: Network Timeout Causing Cascade Failure
+    description: |
+      Slow or timing out network calls cause thread pool exhaustion
+      and cascade failures.
+    severity: critical
+    symptoms:
+      - Thread pool exhaustion
+      - Memory growth from queued requests
+      - All endpoints become slow
+      - Circuit breaker never trips
+    root_causes:
+      - No timeout on network calls
+      - Timeout too long for SLO
+      - No circuit breaker
+      - Unbounded connection pool
+    mitigation_strategies:
+      - Set aggressive timeouts (< SLO budget)
+      - Implement circuit breakers
+      - Bound connection pools
+      - Add bulkheads between dependencies
+    tags:
+      - network
+      - timeout
+      - cascade
+
+  - id: partial-write-corruption
+    name: Partial Write Data Corruption
+    description: |
+      Partial writes (write() returns less than requested) cause
+      data corruption or protocol errors.
+    severity: high
+    symptoms:
+      - Truncated records in files
+      - Protocol framing errors
+      - Checksum mismatches
+      - Intermittent corruption
+    root_causes:
+      - Not checking write() return value
+      - Signal interruption (EINTR)
+      - Non-blocking socket with EAGAIN
+      - Pipe buffer full
+    mitigation_strategies:
+      - Always loop until full buffer written
+      - Handle EINTR correctly
+      - Use higher-level APIs that handle partial writes
+      - Validate written data with checksums
+    tags:
+      - write
+      - corruption
+      - partial
+
+test_templates:
+  - id: test-eio-handling
+    name: EIO Error Handling Test
+    description: Verify application handles disk I/O errors gracefully
+    failure_mode_id: disk-io-error-unhandled
+    priority: critical
+    setup_steps:
+      - Configure fault injection library
+      - Set injection target (specific file or syscall)
+      - Start application
+    execution_steps:
+      - Trigger operation that will hit injected fault
+      - Observe application behavior
+      - Check for error logging
+      - Verify no data corruption
+    assertions:
+      - description: Application should not crash
+        expression: "process.is_running()"
+      - description: Error should be logged
+        expression: "'I/O error' in logs or 'EIO' in logs"
+      - description: No data corruption
+        expression: "data_integrity_check() == True"
+    cleanup_steps:
+      - Disable fault injection
+      - Verify application recovered
+    tags:
+      - eio
+      - disk
+    requires_privileged: false
+    fallback_available: true
+
+  - id: test-enospc-handling
+    name: ENOSPC (Disk Full) Handling Test
+    description: Verify application handles disk full gracefully
+    failure_mode_id: disk-full-graceful
+    priority: high
+    setup_steps:
+      - Configure fault injection to return ENOSPC
+      - Note current application state
+    execution_steps:
+      - Trigger write operation
+      - Observe response to client
+      - Check service availability
+    assertions:
+      - description: Service should remain available
+        expression: "health_check() == 200"
+      - description: Client should receive appropriate error
+        expression: "response.status_code in (503, 507)"
+      - description: No silent data loss
+        expression: "pending_writes_queued() or write_rejected()"
+    cleanup_steps:
+      - Disable fault injection
+      - Verify queued writes complete
+    tags:
+      - enospc
+      - disk
+    requires_privileged: false
+    fallback_available: true
+
+  - id: test-network-timeout
+    name: Network Timeout Resilience Test
+    description: Verify timeout handling doesn't cause cascade failure
+    failure_mode_id: network-timeout-cascade
+    priority: critical
+    setup_steps:
+      - Configure fault injection for network latency
+      - Set latency higher than timeout threshold
+      - Monitor thread pool metrics
+    execution_steps:
+      - Send multiple requests that will timeout
+      - Monitor thread pool utilization
+      - Check circuit breaker state
+      - Verify other endpoints still responsive
+    assertions:
+      - description: Thread pool should not be exhausted
+        expression: "thread_pool_available > 0"
+      - description: Circuit breaker should trip
+        expression: "circuit_breaker_state == 'open'"
+      - description: Other endpoints responsive
+        expression: "health_endpoint_latency < 100"
+    cleanup_steps:
+      - Disable fault injection
+      - Wait for circuit breaker reset
+    tags:
+      - network
+      - timeout
+      - circuit-breaker
+    requires_privileged: false
+    fallback_available: true
+
+  - id: test-partial-write
+    name: Partial Write Handling Test
+    description: Verify partial writes are handled correctly
+    failure_mode_id: partial-write-corruption
+    priority: high
+    setup_steps:
+      - Configure fault injection for partial writes
+      - Prepare test data with known checksum
+    execution_steps:
+      - Write test data through application
+      - Read back written data
+      - Verify checksum
+    assertions:
+      - description: Full data should be written eventually
+        expression: "written_bytes == expected_bytes"
+      - description: Data integrity maintained
+        expression: "checksum(read_data) == expected_checksum"
+    cleanup_steps:
+      - Disable fault injection
+      - Clean up test files
+    tags:
+      - write
+      - partial
+    requires_privileged: false
+    fallback_available: true
+
+recipes:
+  - id: ldpreload-injection
+    name: LD_PRELOAD Fault Injection
+    path: recipes/ldpreload-injection.md
+    description: |
+      Comprehensive guide to using the libfaultinject.so shared library
+      for syscall-level fault injection. Covers building, configuration,
+      and integration with pytest.
+    platforms:
+      - linux
+      - freebsd
+      - macos
+    requires_privileged: false
+
+  - id: python-injection
+    name: Python Socket Fault Injection
+    path: recipes/python-injection.md
+    description: |
+      Pure Python fault injection when LD_PRELOAD is unavailable.
+      Works in containers, on Windows, and with SIP-enabled macOS.
+    platforms:
+      - any
+    requires_privileged: false
+
+  - id: fault-injection-metrics
+    name: Fault Injection Metrics
+    path: recipes/fault-injection-metrics.md
+    description: |
+      Prometheus metrics for tracking injected faults and application
+      response to chaos testing.
+    platforms:
+      - any
+    requires_privileged: false
+
+snippets:
+  - id: fault-inject-c
+    name: libfaultinject.so (C)
+    path: snippets/fault_inject.c
+    language: c
+    description: |
+      LD_PRELOAD shared library that intercepts connect(), send(), recv(),
+      read(), write(), and open() to inject faults like EPIPE, ETIMEDOUT,
+      ECONNRESET, and short reads.
+    build: |
+      # Linux
+      gcc -shared -fPIC -o libfaultinject.so fault_inject.c -ldl -lpthread
+      
+      # macOS
+      gcc -dynamiclib -o libfaultinject.dylib fault_inject.c -lpthread
+      
+      # FreeBSD
+      cc -shared -fPIC -o libfaultinject.so fault_inject.c -lpthread
+    usage: |
+      FAULT_INJECT_ENABLED=1 \
+      FAULT_CONNECT_FAIL_RATE=0.1 \
+      FAULT_CONNECT_ERRNO=ETIMEDOUT \
+      LD_PRELOAD=./libfaultinject.so \
+      python my_test.py
+
+  - id: socket-fault-injector
+    name: Socket Fault Injector (Python)
+    path: snippets/socket_fault_injector.py
+    language: python
+    description: |
+      Pure Python socket wrapper for fault injection. Use when LD_PRELOAD
+      is not available (containers, Windows, macOS with SIP).
+      Supports connect failures, send failures, recv failures, and short reads.
+    usage: |
+      from socket_fault_injector import FaultInjector
+      
+      with FaultInjector(connect_fail_rate=0.1, recv_short_rate=0.2) as fi:
+          response = requests.get("http://api.example.com")
+      print(fi.stats)
+
+  - id: fault-simulator
+    name: Fault Simulator (Python)
+    path: snippets/fault_simulator.py
+    language: python
+    description: |
+      High-level fault simulation for testing without modifying application code.
+      Provides context managers for common fault scenarios.
+    usage: |
+      python fault_simulator.py --scenario connection-timeout --rate 0.1
+
+references:
+  - https://github.com/chaos-mesh/chaos-mesh
+  - https://man7.org/linux/man-pages/man8/ld.so.8.html
+  - https://netflix.github.io/chaosmonkey/
+  - https://principlesofchaos.org/

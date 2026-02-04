@@ -1,0 +1,39 @@
+id: security.tls.chain.valid
+title: TLS Certificate Chain Valid
+description: >
+  TLS certificates presented to clients must have a valid chain to a
+  trusted root, not be expired, and match the requested hostname via
+  CN or SAN fields.
+risk: high
+safe_in_prod: true
+
+required_signals:
+  - Certificate chain from TLS handshake
+  - Certificate validity dates (notBefore, notAfter)
+  - SNI hostname from client
+  - Certificate SAN/CN fields
+
+pass_criteria:
+  - Chain validates to trusted root CA
+  - Current time is within validity period
+  - SNI hostname matches certificate SAN or CN
+  - Intermediate certificates included in chain
+
+suggested_checks:
+  - name: chain_validation
+    method: tcp
+
+  - name: expiry_check
+    method: tcp
+
+  - name: hostname_match
+    method: tcp
+
+
+evidence_to_capture:
+  - Full certificate chain (PEM)
+  - Certificate notBefore and notAfter dates
+  - SNI value sent by client
+  - SAN and CN from leaf certificate
+  - Validation error if any
+

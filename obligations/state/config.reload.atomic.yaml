@@ -1,0 +1,42 @@
+id: state.config.reload.atomic
+title: Config Reload Atomic
+description: >
+  Configuration reload must be atomic. Requests must see either the old
+  or new configuration, never a mix. Reload failures must not leave
+  the system in a broken state.
+risk: high
+safe_in_prod: false
+
+assumptions:
+  - Proxy supports runtime config reload
+  - Reload can be triggered via signal or API
+
+required_signals:
+  - Config version before and after reload
+  - Request routing during reload window
+  - Reload success/failure status
+  - Worker process states
+
+pass_criteria:
+  - No request sees partial configuration
+  - Failed reload preserves previous working config
+  - All workers converge to same config version
+  - In-flight requests complete with original config
+
+suggested_checks:
+  - name: atomic_reload
+    method: http
+
+  - name: failed_reload_rollback
+    method: http
+
+  - name: worker_convergence
+    method: metrics
+
+
+evidence_to_capture:
+  - Config version per request
+  - Reload timestamp
+  - Worker process IDs and config versions
+  - Any errors during reload
+

@@ -1,0 +1,36 @@
+id: protocol.content.length
+title: Content-Length Accuracy
+description: >
+  Content-Length header must match actual body size. Mismatches cause
+  client hangs (waiting for more bytes) or truncation (closing early).
+  Chunked encoding must be correctly applied or removed.
+risk: high
+safe_in_prod: true
+
+required_signals:
+  - Content-Length header value
+  - Actual response body byte count
+  - Transfer-Encoding header
+
+pass_criteria:
+  - Content-Length equals actual body bytes
+  - Chunked encoding removed for HTTP/1.0 clients
+  - Body modifications (compression) update Content-Length
+
+suggested_checks:
+  - name: content_length_match
+    method: http
+
+  - name: chunked_to_length
+    method: http
+
+  - name: compression_length_update
+    method: http
+
+
+evidence_to_capture:
+  - Content-Length header
+  - Transfer-Encoding header
+  - Actual body byte count
+  - HTTP version of client and backend
+

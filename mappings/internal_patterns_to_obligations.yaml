@@ -1,0 +1,342 @@
+# Internal Pattern to Obligation Mapping
+# 
+# Maps product-specific assertion clusters to portable obligations.
+# Use this to translate internal test patterns to the standard taxonomy.
+#
+# CONFIDENTIAL: Do not include paths, secrets, or full URLs.
+
+version: "1.0"
+source_knowledge_id: test_suite_selsrv_r
+
+mappings:
+
+  # ============================================================================
+  # ROUTING DOMAIN
+  # ============================================================================
+
+  - internal_cluster: carp_backend_selection
+    obligations:
+      - routing.backend.selection
+    internal_signals:
+      - response header: x-carp-server
+      - response header: x-carp-key
+      - fixture: cc.winner / cc.losers
+      - fixture: carp_selected_server
+    notes: |
+      CARP (Cache Array Routing Protocol) is the consistent hash algorithm.
+      Map "carp" → "consistent hash" in portable terms.
+      cc.winner.id → selected_backend_id
+      cc.losers → non_selected_backends
+
+  - internal_cluster: load_balancer_distribution
+    obligations:
+      - routing.backend.selection
+      - routing.fanout.bound
+    internal_signals:
+      - assertion: len(cc.winner.obj.history) == N
+      - assertion: sum(len(ls.obj.history) for ls in cc.losers) == 0
+      - fixture: ep_mock.history
+    notes: |
+      Tests verify winner receives exactly 1 request, losers receive 0.
+      Map to fanout.bound when checking total backend attempts.
+      ep_mock → backend_mock in portable terms.
+
+  - internal_cluster: request_method_forwarding
+    obligations:
+      - routing.backend.selection
+    internal_signals:
+      - assertion: ep_mock.history[N].request.method == 'GET'
+    notes: |
+      Verifies HTTP method preserved to backend.
+      Could also map to a protocol.method.preserved obligation if added.
+
+  # ============================================================================
+  # CACHE DOMAIN
+  # ============================================================================
+
+  - internal_cluster: cache_header_assertions
+    obligations:
+      - cache.key.stability
+      - cache.vary.honored
+    internal_signals:
+      - assertion: ep_mock.history[N].request.headers['cache-control']
+      - assertion: r.headers['x-cache'] == 'HIT'
+    notes: |
+      Internal tests check cache behavior via headers.
+      x-cache header indicates hit/miss status.
+      Map cache-control parsing to TTL obligations.
+
+  # ============================================================================
+  # PROTOCOL DOMAIN
+  # ============================================================================
+
+  - internal_cluster: http_status_code_validation
+    obligations:
+      - protocol.http.status
+    internal_signals:
+      - assertion: r.status_code == 200
+      - assertion: r.status_code == 503
+      - assertion: r.status_code == 504
+      - log field: status
+    notes: |
+      Direct mapping. Status codes are portable.
+      503 = backend unavailable, 504 = backend timeout.
+
+  - internal_cluster: content_length_body
+    obligations:
+      - protocol.content.length
+    internal_signals:
+      - assertion: len(r.content) == file_size
+      - assertion: r.headers['content-length'] == str(len(resp_body))
+      - assertion: int(r.headers['content-length']) == file_size
+    notes: |
+      Tests verify body size matches Content-Length header.
+      Also covers range request (206) scenarios.
+
+  - internal_cluster: http_version
+    obligations:
+      - protocol.http.status
+    internal_signals:
+      - assertion: r.http_version == "HTTP/1.1"
+      - assertion: ep_mock.history[N].request.scheme == 'https'
+    notes: |
+      HTTP version negotiation tests.
+      scheme indicates TLS vs plaintext.
+
+  # ============================================================================
+  # SECURITY DOMAIN
+  # ============================================================================
+
+  - internal_cluster: tls_certificate_handling
+    obligations:
+      - security.tls.chain.valid
+    internal_signals:
+      - assertion: cert.not_valid_before.strftime(...) == headers['x-cert-notbefore']
+      - assertion: cert.not_valid_after.strftime(...) == headers['x-cert-notafter']
+      - response extension: ocsp_status
+    notes: |
+      Tests validate certificate dates exposed in headers.
+      OCSP stapling tested via response extensions.
+      Map x-cert-* headers to certificate metadata.
+
+  - internal_cluster: mtls_client_cert
+    obligations:
+      - security.mtls.client.verified
+    internal_signals:
+      - fixture: prepare_mtls_configuration
+      - assertion: opts['x-ssl-client-cert'] == r.ext['client_cert']
+      - header: x-ssl-client-cert
+    notes: |
+      mTLS tests verify client cert is validated and headers propagated.
+      x-ssl-* headers are product-specific, map to generic client cert headers.
+
+  - internal_cluster: client_ip_preservation
+    obligations:
+      - security.client.ip.preserved
+    internal_signals:
+      - assertion: ep_mock.history[-1].request.headers["X-EGIO-Client-IP"]
+      - header: X-Forwarded-For
+      - header: True-Client-IP
+      - log field: true_client_ip
+    notes: |
+      X-EGIO-Client-IP is product-specific.
+      Map to X-Forwarded-For or True-Client-IP in portable tests.
+
+  # ============================================================================
+  # RESILIENCE DOMAIN
+  # ============================================================================
+
+  - internal_cluster: timeout_error_handling
+    obligations:
+      - resilience.timeout.enforced
+      - protocol.http.status
+    internal_signals:
+      - assertion: rsp.status_code == 503
+      - assertion: int(log_line['status']) == 504
+      - log field: termination_state
+    notes: |
+      termination_state codes are HAProxy-specific:
+        sH = server timeout, cD = client disconnect, etc.
+      Map to generic timeout/error categories.
+      504 = gateway timeout, 503 = service unavailable.
+
+  - internal_cluster: retry_logic
+    obligations:
+      - resilience.retry.bounded
+      - routing.fanout.bound
+    internal_signals:
+      - assertion: len(ep_mock.history) == N (where N > 1 indicates retries)
+      - multiple backend mock histories
+    notes: |
+      If ep_mock.history length > 1 for single request, retries occurred.
+      Track backend attempt count to verify retry limits.
+
+  # ============================================================================
+  # OBSERVABILITY DOMAIN
+  # ============================================================================
+
+  - internal_cluster: access_log_verification
+    obligations:
+      - observability.access.logged
+    internal_signals:
+      - assertion: log_line['server_name'] == 'ep2'
+      - assertion: log_line['termination_state'] == 'CH'
+      - assertion: log_line['req_hdr_range'] == opts['range']
+      - fixture: log('{logname}').last_line
+    notes: |
+      Internal log parsing uses product-specific field names.
+      server_name → backend_id
+      termination_state → connection_close_reason
+      req_hdr_* → request_header_*
+
+  - internal_cluster: prometheus_metrics
+    obligations:
+      - observability.metrics.exposed
+    internal_signals:
+      - assertion: table.size == prometheus_stats_size[N]
+      - assertion: table.gsc_stats.local_mean == prometheus_stats_gsc_local_mean[N]
+      - assertion: len(prometheus_peers_count) == N
+      - endpoint: /metrics
+    notes: |
+      GSC (Global Session Counter) is product-specific.
+      Map gsc_* metrics to generic session/rate counters.
+      prometheus_peers_count → cluster_peer_count.
+
+  # ============================================================================
+  # STATE DOMAIN
+  # ============================================================================
+
+  - internal_cluster: stick_table_state
+    obligations:
+      - state.ratelimit.enforced
+      - state.config.reload.atomic
+    internal_signals:
+      - assertion: req[N].carpb not in table
+      - assertion: len(prometheus_stats_sticksess) == N
+      - fixture: haproxy stick tables
+    notes: |
+      Stick tables are HAProxy's session/rate limit storage.
+      Map stick_table → session_table or rate_limit_table.
+      carpb (CARP backend hash) → backend_hash_key.
+
+  - internal_cluster: config_reload
+    obligations:
+      - state.config.reload.atomic
+    internal_signals:
+      - assertion: config_1 != config_2
+      - assertion: (await irr_client.show_cdn_config(...))['field'] == value
+      - fixture: restart_irr
+    notes: |
+      irr_client is the internal proxy control interface.
+      Map show_cdn_config → get_config / dump_config.
+      restart_irr → reload_config.
+
+  - internal_cluster: gossip_autoscaling
+    obligations:
+      - state.config.reload.atomic
+    internal_signals:
+      - assertion: len(gossip_tree_size) == N
+      - assertion: int(gossip_tree_size[N]) == M
+      - assertion: len(active_gossip_cnt) == N
+    notes: |
+      Gossip protocol handles cluster membership and config sync.
+      Map gossip_tree → cluster_membership_tree.
+      This validates distributed config consistency.
+
+  # ============================================================================
+  # HEADER PROPAGATION
+  # ============================================================================
+
+  - internal_cluster: header_propagation
+    obligations:
+      - routing.backend.selection
+      - security.client.ip.preserved
+    internal_signals:
+      - assertion: opts['x-custom'] == cc.winner.obj.history[0].request.headers['x-custom']
+      - assertion: 'x-internal-header' not in r.headers
+      - assertion: r.headers['x-origin-lbl'] == served_hosts[0]
+    notes: |
+      Tests verify headers forwarded to backend and stripped from response.
+      x-origin-lbl → x-backend-id in portable terms.
+      Internal headers should be sanitized (security.header.sanitization).
+
+  # ============================================================================
+  # PROCESS/WORKER STATE
+  # ============================================================================
+
+  - internal_cluster: process_worker_state
+    obligations:
+      - state.config.reload.atomic
+      - observability.metrics.exposed
+    internal_signals:
+      - assertion: pids == irr_client.pid_workers
+      - assertion: host.process.filter(user='root', comm='haproxy')
+      - assertion: pid1 == pid2
+    notes: |
+      Tests verify worker processes survive reload.
+      pid_workers → worker_process_ids.
+      Process assertions validate graceful reload.
+
+  # ============================================================================
+  # URL REWRITE
+  # ============================================================================
+
+  - internal_cluster: url_rewrite_routing
+    obligations:
+      - routing.backend.selection
+    internal_signals:
+      - assertion: str(ep_mock.history[0].request.rel_url) == '/rewritten/path'
+      - assertion: cc.winner.obj.history[0].url == opts['url']
+    notes: |
+      URL rewrite tests verify transformation before backend routing.
+      rel_url → request_path.
+      Could map to rewrite.url.transform obligation if added.
+
+# ============================================================================
+# SIGNAL TRANSLATION TABLE
+# ============================================================================
+
+signal_translations:
+  # Fixtures
+  cc.winner: selected_backend
+  cc.losers: non_selected_backends
+  ep_mock: backend_mock
+  irr_client: proxy_admin_client
+  
+  # Headers
+  x-carp-server: x-backend-server
+  x-carp-key: x-routing-key
+  X-EGIO-Client-IP: X-Real-IP
+  x-origin-lbl: x-backend-id
+  x-ssl-client-cert: x-client-cert
+  
+  # Log fields
+  termination_state: connection_close_reason
+  server_name: backend_id
+  req_hdr_*: request_header_*
+  
+  # Metrics
+  gsc_*: session_counter_*
+  sticksess: session_table_entries
+  gossip_tree_size: cluster_membership_count
+  
+  # Config
+  show_cdn_config: get_proxy_config
+  restart_irr: reload_proxy
+
+# ============================================================================
+# UNMAPPED CLUSTERS (may need new obligations)
+# ============================================================================
+
+unmapped_clusters:
+  - name: memory_shared_state
+    description: Tests for shared memory segment allocation
+    potential_obligation: state.memory.bounded
+    
+  - name: file_path_existence
+    description: Tests that required files exist on disk
+    potential_obligation: observability.files.present
+    
+  - name: connection_socket_tracking
+    description: TCP connection state via eBPF/strace
+    potential_obligation: observability.connections.tracked

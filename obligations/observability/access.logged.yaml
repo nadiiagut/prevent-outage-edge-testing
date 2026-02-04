@@ -1,0 +1,37 @@
+id: observability.access.logged
+title: Access Logs Complete
+description: >
+  Every request must produce an access log entry with required fields:
+  timestamp, client IP, method, URL, status code, response size, and
+  duration. Missing logs impair debugging and compliance.
+risk: high
+safe_in_prod: true
+
+required_signals:
+  - Access log entries
+  - Request count (from metrics)
+  - Log completeness rate
+
+pass_criteria:
+  - Every request produces exactly one log entry
+  - Required fields present and non-empty
+  - Log timestamp within request duration window
+  - Early disconnects still logged
+
+suggested_checks:
+  - name: log_completeness
+    method: logs
+
+  - name: required_fields_present
+    method: logs
+
+  - name: early_disconnect_logged
+    method: logs
+
+
+evidence_to_capture:
+  - Sample log entries
+  - Log entry count vs request count
+  - Missing field analysis
+  - Log write latency
+

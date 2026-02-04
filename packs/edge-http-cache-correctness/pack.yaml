@@ -1,0 +1,197 @@
+# pack.yaml - edge-http-cache-correctness
+# Knowledge pack for HTTP caching correctness at the edge.
+#
+# This pack covers RFC 7234 compliance, cache key correctness,
+# conditional request handling, and Vary header edge cases.
+
+id: edge-http-cache-correctness
+name: Edge HTTP Cache Correctness
+version: "1.0.0"
+description: |
+  Tests and recipes for validating HTTP cache correctness at edge servers.
+  Covers RFC 7234 compliance, ETag/Last-Modified handling, Vary header
+  semantics, and cache invalidation scenarios.
+  
+  This pack does NOT guarantee complete coverage of all caching edge cases.
+  Use as a starting point and extend based on your specific CDN/proxy behavior.
+author: Edge Reliability Team
+tags:
+  - http
+  - cache
+  - correctness
+  - rfc7234
+  - edge
+  - cdn
+
+failure_modes:
+  - id: stale-on-revalidate-fail
+    name: Stale Content Served on Revalidation Failure
+    description: |
+      When origin returns 5xx during revalidation, edge may serve stale content
+      indefinitely or fail open incorrectly.
+    severity: high
+    symptoms:
+      - Outdated content served after origin recovery
+      - Inconsistent responses across edge nodes
+      - Cache-Status header shows stale without revalidation attempt
+    root_causes:
+      - stale-if-error misconfiguration
+      - Missing or incorrect error TTL
+      - Origin health check not triggering cache bypass
+    mitigation_strategies:
+      - Configure bounded stale-if-error (e.g., max 1 hour)
+      - Implement origin health-aware caching
+      - Add Cache-Status header logging
+    tags:
+      - revalidation
+      - stale
+
+  - id: vary-header-cache-split
+    name: Incorrect Vary Header Cache Splitting
+    description: |
+      Cache does not correctly split cached responses based on Vary header,
+      serving wrong content to clients with different request headers.
+    severity: critical
+    symptoms:
+      - Wrong content-encoding served (gzip to non-gzip client)
+      - Wrong language version served
+      - Mobile content served to desktop clients
+    root_causes:
+      - Vary header ignored by cache
+      - Vary header normalization issues
+      - Cache key not including varied headers
+    mitigation_strategies:
+      - Audit cache key configuration for Vary support
+      - Normalize Vary headers before caching
+      - Add explicit test cases for each Vary dimension
+    tags:
+      - vary
+      - content-negotiation
+
+  - id: conditional-request-bypass
+    name: Conditional Request Not Honored
+    description: |
+      Cache ignores If-None-Match/If-Modified-Since and returns full response
+      when 304 Not Modified should be returned.
+    severity: medium
+    symptoms:
+      - Excessive bandwidth usage
+      - Higher origin load than expected
+      - Missing 304 responses in logs
+    root_causes:
+      - ETag comparison using weak matching incorrectly
+      - Last-Modified precision issues
+      - Cache configuration stripping conditional headers
+    mitigation_strategies:
+      - Verify ETag format (weak vs strong)
+      - Test conditional request flow explicitly
+      - Monitor 304 response ratio
+    tags:
+      - conditional
+      - etag
+      - bandwidth
+
+  - id: cache-key-collision
+    name: Cache Key Collision
+    description: |
+      Different resources share the same cache key, causing wrong content
+      to be served.
+    severity: critical
+    symptoms:
+      - Random wrong content served
+      - Content from different users mixed
+      - Query parameter variations ignored
+    root_causes:
+      - Query string not included in cache key
+      - Host header normalization stripping port
+      - Path normalization issues (trailing slash, case)
+    mitigation_strategies:
+      - Audit and document cache key composition
+      - Add collision detection tests
+      - Use unique cache tags per resource type
+    tags:
+      - cache-key
+      - security
+
+test_templates:
+  - id: test-vary-accept-encoding
+    name: Vary Accept-Encoding Cache Split
+    description: Verify cache correctly splits on Accept-Encoding header
+    failure_mode_id: vary-header-cache-split
+    priority: critical
+    setup_steps:
+      - Configure origin to return Vary: Accept-Encoding
+      - Clear edge cache
+    execution_steps:
+      - Request with Accept-Encoding: gzip
+      - Record response and cache status
+      - Request with Accept-Encoding: identity
+      - Record response and cache status
+    assertions:
+      - description: Gzip request should receive gzip-encoded response
+        expression: "response1.headers['content-encoding'] == 'gzip'"
+      - description: Identity request should receive uncompressed response
+        expression: "'content-encoding' not in response2.headers or response2.headers['content-encoding'] == 'identity'"
+      - description: Both should be cache hits (after initial miss)
+        expression: "response2_cache_status == 'hit'"
+    cleanup_steps:
+      - Purge test cache entries
+    tags:
+      - vary
+      - encoding
+    requires_privileged: false
+
+  - id: test-conditional-304
+    name: Conditional Request 304 Response
+    description: Verify cache returns 304 for valid conditional requests
+    failure_mode_id: conditional-request-bypass
+    priority: high
+    setup_steps:
+      - Populate cache with response containing ETag
+      - Record ETag value
+    execution_steps:
+      - Send request with If-None-Match header matching ETag
+      - Record response status and body
+    assertions:
+      - description: Response should be 304 Not Modified
+        expression: "response.status_code == 304"
+      - description: Response body should be empty
+        expression: "len(response.content) == 0"
+    cleanup_steps:
+      - Clear test cache entries
+    tags:
+      - conditional
+      - etag
+    requires_privileged: false
+
+  - id: test-stale-while-revalidate
+    name: Stale-While-Revalidate Behavior
+    description: Verify stale content served while async revalidation occurs
+    failure_mode_id: stale-on-revalidate-fail
+    priority: high
+    setup_steps:
+      - Configure origin with Cache-Control: max-age=1, stale-while-revalidate=60
+      - Populate cache
+      - Wait for max-age to expire
+    execution_steps:
+      - Send request (should trigger async revalidation)
+      - Record response time and content
+      - Send second request shortly after
+      - Record if content updated
+    assertions:
+      - description: First request should return stale content quickly
+        expression: "response1.elapsed.total_seconds() < 0.5"
+      - description: Content should eventually refresh
+        expression: "response2.content == fresh_content or revalidation_triggered"
+    cleanup_steps:
+      - Reset origin response
+      - Clear cache
+    tags:
+      - stale
+      - revalidation
+    requires_privileged: false
+
+references:
+  - https://httpwg.org/specs/rfc7234.html
+  - https://developer.mozilla.org/en-US/docs/Web/HTTP/Caching
+  - https://www.fastly.com/blog/best-practices-using-vary-header

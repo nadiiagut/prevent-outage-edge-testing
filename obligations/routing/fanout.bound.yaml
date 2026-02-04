@@ -1,0 +1,36 @@
+id: routing.fanout.bound
+title: Request Fanout is Bounded
+description: >
+  A single client request must not fan out to more backends than the
+  configured limit. Unbounded fanout causes origin overload and cascade
+  failures during incidents.
+risk: high
+safe_in_prod: true
+
+required_signals:
+  - Backend request count per client request
+  - Request correlation ID propagated to backends
+  - Retry and failover configuration
+
+pass_criteria:
+  - Single request contacts at most N backends (N = retry limit + 1)
+  - Retry attempts use different backends when available
+  - Total backend requests never exceed configured ceiling
+
+suggested_checks:
+  - name: retry_fanout_limit
+    method: http
+
+  - name: parallel_fanout_check
+    method: logs
+
+  - name: correlation_id_tracking
+    method: headers
+
+
+evidence_to_capture:
+  - Client request ID
+  - List of backend IPs/hosts contacted
+  - Timestamp of each backend attempt
+  - Final response status and latency
+

@@ -1,0 +1,190 @@
+# packs/cdn_cache.yaml
+# Knowledge pack for CDN cache-related failure modes at the edge.
+
+id: cdn-cache-invalidation
+name: CDN Cache Invalidation Failures
+version: "1.0.0"
+description: |
+  Knowledge pack covering cache invalidation failures, stale content serving,
+  cache stampedes, and related edge caching issues.
+author: Edge Reliability Team
+tags:
+  - cdn
+  - cache
+  - invalidation
+  - edge
+  - performance
+
+failure_modes:
+  - id: cache-stampede
+    name: Cache Stampede (Thundering Herd)
+    description: |
+      Multiple requests hit origin simultaneously when cache expires,
+      overwhelming backend systems.
+    severity: critical
+    symptoms:
+      - Sudden spike in origin requests
+      - Increased latency during cache expiry windows
+      - Backend CPU/memory spike
+      - Elevated error rates from origin
+    root_causes:
+      - All cache entries expiring simultaneously
+      - No stale-while-revalidate implementation
+      - Missing request coalescing
+    mitigation_strategies:
+      - Implement stale-while-revalidate
+      - Add jitter to cache TTLs
+      - Use request coalescing/collapsing
+      - Implement circuit breakers
+    tags:
+      - performance
+      - availability
+
+  - id: stale-content-served
+    name: Stale Content Served After Purge
+    description: |
+      Content continues to be served from edge caches after a purge request,
+      potentially serving outdated or incorrect data.
+    severity: high
+    symptoms:
+      - Users report seeing old content
+      - A/B test contamination
+      - Price or inventory discrepancies
+    root_causes:
+      - Purge propagation delay
+      - Incomplete purge across all PoPs
+      - Race condition between purge and new requests
+      - Cache key mismatch
+    mitigation_strategies:
+      - Implement surrogate keys for grouped invalidation
+      - Use versioned URLs for critical assets
+      - Monitor purge completion across PoPs
+      - Implement cache-busting query parameters
+    tags:
+      - correctness
+      - data-integrity
+
+  - id: negative-cache-poisoning
+    name: Negative Cache Poisoning
+    description: |
+      Error responses (404, 500) get cached and continue to be served
+      even after the origin recovers.
+    severity: high
+    symptoms:
+      - 404/500 errors persist after fix deployed
+      - Intermittent errors from specific PoPs
+      - Origin shows healthy but users see errors
+    root_causes:
+      - Missing or incorrect Cache-Control on error responses
+      - Default TTL applied to error responses
+      - CDN caching non-cacheable responses
+    mitigation_strategies:
+      - Explicitly set Cache-Control: no-store on error responses
+      - Configure CDN to not cache 5xx responses
+      - Implement health-based cache invalidation
+    tags:
+      - availability
+      - correctness
+
+test_templates:
+  - id: test-cache-stampede-protection
+    name: Cache Stampede Protection Test
+    description: Verify request coalescing prevents origin overload on cache miss
+    failure_mode_id: cache-stampede
+    priority: critical
+    setup_steps:
+      - Deploy test origin with request counting
+      - Configure cache with short TTL (5s)
+      - Clear all caches
+    execution_steps:
+      - Wait for cache to expire
+      - Send 100 concurrent requests for same resource
+      - Record origin request count
+    assertions:
+      - description: Origin should receive <= 5 requests (coalescing working)
+        expression: "origin_request_count <= 5"
+        expected: true
+        timeout_seconds: 30
+    cleanup_steps:
+      - Reset cache configuration
+      - Stop test origin
+    tags:
+      - performance
+      - coalescing
+    estimated_duration_seconds: 60
+
+  - id: test-purge-propagation
+    name: Cache Purge Propagation Test
+    description: Verify purge completes across all PoPs within SLA
+    failure_mode_id: stale-content-served
+    priority: high
+    setup_steps:
+      - Populate cache with test content
+      - Record cache hit from multiple PoPs
+    execution_steps:
+      - Issue purge request
+      - Poll all PoPs for cache status
+      - Record time to full propagation
+    assertions:
+      - description: Purge should complete within 30 seconds
+        expression: "purge_propagation_time_seconds <= 30"
+        expected: true
+        timeout_seconds: 60
+    cleanup_steps:
+      - Remove test content
+    tags:
+      - purge
+      - propagation
+    estimated_duration_seconds: 120
+
+observability_recipes:
+  - id: cache-health-observability
+    name: Cache Health Monitoring
+    description: Metrics and alerts for cache health and invalidation
+    failure_mode_ids:
+      - cache-stampede
+      - stale-content-served
+      - negative-cache-poisoning
+    metrics:
+      - name: cache_hit_ratio
+        type: gauge
+        description: Cache hit ratio by PoP and content type
+        labels:
+          - pop
+          - content_type
+        unit: ratio
+        collection_interval_seconds: 15
+      - name: origin_requests_total
+        type: counter
+        description: Total requests to origin
+        labels:
+          - pop
+          - status_code
+      - name: purge_propagation_duration_seconds
+        type: histogram
+        description: Time for purge to propagate to all PoPs
+        labels:
+          - purge_type
+    log_patterns:
+      - name: cache_stampede_detected
+        pattern: "coalesce_queue_depth > 100"
+        severity: high
+        action: alert
+      - name: purge_timeout
+        pattern: "purge_propagation_timeout"
+        severity: critical
+        action: alert
+    alerts:
+      - name: CacheHitRatioLow
+        expr: "cache_hit_ratio < 0.8"
+        for: 5m
+        severity: warning
+      - name: OriginRequestSpike
+        expr: "rate(origin_requests_total[1m]) > 1000"
+        for: 1m
+        severity: critical
+
+references:
+  - https://web.dev/stale-while-revalidate/
+  - https://en.wikipedia.org/wiki/Cache_stampede
+  - https://developer.fastly.com/learning/concepts/purging/

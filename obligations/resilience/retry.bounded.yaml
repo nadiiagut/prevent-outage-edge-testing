@@ -1,0 +1,42 @@
+id: resilience.retry.bounded
+title: Retry Count Bounded
+description: >
+  Failed requests may be retried only up to the configured limit.
+  Unbounded retries amplify load during outages. Non-idempotent
+  requests (POST) should not be retried by default.
+risk: high
+safe_in_prod: false
+
+assumptions:
+  - Retry policy is configured
+  - Multiple backends available for retry
+
+required_signals:
+  - Retry count per request
+  - Backend attempt history
+  - Request method (GET/POST/etc)
+  - Retry policy configuration
+
+pass_criteria:
+  - Total attempts ≤ retry_limit + 1
+  - Retries go to different backends when available
+  - POST/PUT/PATCH not retried unless explicitly configured
+  - Retry budget not exceeded under load
+
+suggested_checks:
+  - name: retry_limit_respected
+    method: http
+
+  - name: retry_different_backend
+    method: logs
+
+  - name: post_no_retry
+    method: http
+
+
+evidence_to_capture:
+  - Request method
+  - Retry count
+  - Backend IPs contacted
+  - Final response status
+

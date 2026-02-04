@@ -1,0 +1,216 @@
+# packs/tls_termination.yaml
+# Knowledge pack for TLS/SSL termination failures at the edge.
+
+id: tls-termination-failures
+name: TLS Termination Failures
+version: "1.0.0"
+description: |
+  Knowledge pack covering TLS certificate issues, handshake failures,
+  protocol mismatches, and cipher suite problems at edge termination points.
+author: Edge Reliability Team
+tags:
+  - tls
+  - ssl
+  - security
+  - edge
+  - certificates
+
+failure_modes:
+  - id: cert-expiry-outage
+    name: Certificate Expiry Outage
+    description: |
+      TLS certificates expire causing complete service unavailability
+      for HTTPS traffic.
+    severity: critical
+    symptoms:
+      - Browser shows certificate expired warnings
+      - API clients reject connections
+      - Complete HTTPS traffic failure
+      - Monitoring shows TLS handshake failures
+    root_causes:
+      - Certificate renewal automation failure
+      - Misconfigured certificate management
+      - Human error in manual renewal process
+      - DNS validation failures for auto-renewal
+    mitigation_strategies:
+      - Implement certificate expiry monitoring (30/14/7 day alerts)
+      - Use automated certificate management (ACME/Let's Encrypt)
+      - Maintain backup certificates
+      - Implement certificate transparency monitoring
+    tags:
+      - availability
+      - security
+      - certificates
+
+  - id: cipher-suite-mismatch
+    name: Cipher Suite Mismatch
+    description: |
+      Client and server cannot negotiate a common cipher suite,
+      causing handshake failures for subset of clients.
+    severity: high
+    symptoms:
+      - TLS handshake failures for specific client types
+      - Old browsers/devices cannot connect
+      - Intermittent connection failures
+      - SSL Labs score degradation
+    root_causes:
+      - Overly restrictive cipher configuration
+      - Deprecated cipher removal without client analysis
+      - Misconfigured cipher preference order
+    mitigation_strategies:
+      - Analyze client cipher support before changes
+      - Implement gradual cipher deprecation
+      - Monitor TLS handshake failure rates by cipher
+      - Maintain compatibility matrix documentation
+    tags:
+      - compatibility
+      - security
+
+  - id: ocsp-stapling-failure
+    name: OCSP Stapling Failure
+    description: |
+      OCSP responder unavailable causing certificate validation delays
+      or failures for clients that check revocation.
+    severity: medium
+    symptoms:
+      - Increased TLS handshake latency
+      - Connection timeouts for strict clients
+      - OCSP responder errors in logs
+    root_causes:
+      - OCSP responder outage
+      - Network connectivity to OCSP responder
+      - Stale OCSP response in staple cache
+    mitigation_strategies:
+      - Enable OCSP stapling with must-staple
+      - Monitor OCSP response freshness
+      - Implement OCSP response caching
+      - Consider CRLite as fallback
+    tags:
+      - performance
+      - security
+
+  - id: sni-routing-failure
+    name: SNI Routing Failure
+    description: |
+      Server Name Indication routing fails causing clients to receive
+      wrong certificate or connect to wrong backend.
+    severity: high
+    symptoms:
+      - Certificate name mismatch errors
+      - Requests routed to wrong service
+      - Intermittent certificate warnings
+    root_causes:
+      - SNI configuration mismatch
+      - Missing SNI support in legacy clients
+      - Default certificate misconfiguration
+    mitigation_strategies:
+      - Audit SNI routing configuration
+      - Configure appropriate default certificate
+      - Monitor SNI mismatch rates
+      - Document SNI requirements for clients
+    tags:
+      - routing
+      - security
+
+test_templates:
+  - id: test-cert-expiry-detection
+    name: Certificate Expiry Detection Test
+    description: Verify certificate expiry monitoring detects upcoming expirations
+    failure_mode_id: cert-expiry-outage
+    priority: critical
+    setup_steps:
+      - Generate test certificate with 7-day validity
+      - Deploy to test endpoint
+      - Configure expiry monitoring
+    execution_steps:
+      - Trigger expiry check
+      - Verify alert generated for 7-day threshold
+    assertions:
+      - description: Alert should be generated for cert expiring in 7 days
+        expression: "expiry_alert_generated"
+        expected: true
+    cleanup_steps:
+      - Remove test certificate
+      - Reset monitoring configuration
+    tags:
+      - certificates
+      - monitoring
+    estimated_duration_seconds: 30
+
+  - id: test-cipher-compatibility
+    name: Cipher Suite Compatibility Test
+    description: Verify critical client types can negotiate TLS successfully
+    failure_mode_id: cipher-suite-mismatch
+    priority: high
+    setup_steps:
+      - Prepare list of critical client cipher suites
+      - Configure test endpoint with production cipher config
+    execution_steps:
+      - For each client cipher suite, attempt TLS handshake
+      - Record success/failure and negotiated cipher
+    assertions:
+      - description: All critical clients should negotiate successfully
+        expression: "all_critical_clients_connected"
+        expected: true
+    cleanup_steps:
+      - Log compatibility matrix
+    tags:
+      - compatibility
+      - cipher
+    estimated_duration_seconds: 60
+
+observability_recipes:
+  - id: tls-health-observability
+    name: TLS Health Monitoring
+    description: Comprehensive TLS health and certificate monitoring
+    failure_mode_ids:
+      - cert-expiry-outage
+      - cipher-suite-mismatch
+      - ocsp-stapling-failure
+      - sni-routing-failure
+    metrics:
+      - name: tls_handshake_duration_seconds
+        type: histogram
+        description: TLS handshake duration
+        labels:
+          - protocol_version
+          - cipher_suite
+      - name: tls_handshake_failures_total
+        type: counter
+        description: TLS handshake failures by reason
+        labels:
+          - reason
+          - client_type
+      - name: certificate_expiry_seconds
+        type: gauge
+        description: Seconds until certificate expiry
+        labels:
+          - domain
+          - issuer
+    log_patterns:
+      - name: handshake_failure
+        pattern: "SSL_do_handshake.*failed"
+        severity: high
+        action: count
+      - name: cert_expiry_warning
+        pattern: "certificate.*expir"
+        severity: critical
+        action: alert
+    alerts:
+      - name: CertExpiryWarning
+        expr: "certificate_expiry_seconds < 604800"
+        for: 1h
+        severity: warning
+      - name: CertExpiryCritical
+        expr: "certificate_expiry_seconds < 86400"
+        for: 5m
+        severity: critical
+      - name: TLSHandshakeFailureSpike
+        expr: "rate(tls_handshake_failures_total[5m]) > 10"
+        for: 2m
+        severity: high
+
+references:
+  - https://wiki.mozilla.org/Security/Server_Side_TLS
+  - https://www.ssllabs.com/ssltest/
+  - https://letsencrypt.org/docs/

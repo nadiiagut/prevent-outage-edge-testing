@@ -1,0 +1,23 @@
+id: cache.key.stability
+title: Cache Key Stability
+description: Identical requests must produce identical cache keys.
+risk: high
+safe_in_prod: true
+
+required_signals:
+  - Cache key from debug header or logs
+  - Request URL and headers
+
+pass_criteria:
+  - Same URL with reordered query params produces same key
+  - Normalization applied consistently
+
+suggested_checks:
+  - name: query_param_order_invariance
+    method: http
+  - name: case_normalization
+    method: http
+
+evidence_to_capture:
+  - Cache key value
+  - Cache hit/miss status

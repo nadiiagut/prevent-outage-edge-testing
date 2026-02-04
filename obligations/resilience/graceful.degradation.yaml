@@ -1,0 +1,41 @@
+id: resilience.graceful.degradation
+title: Graceful Degradation on Partial Failure
+description: >
+  When some backends fail, the proxy must continue serving traffic via
+  healthy backends rather than failing all requests. Partial outages
+  should not become total outages.
+risk: high
+safe_in_prod: false
+
+assumptions:
+  - Multiple backends in pool
+  - Health checking enabled
+
+required_signals:
+  - Backend health states
+  - Request success rate during partial outage
+  - Traffic distribution across backends
+
+pass_criteria:
+  - Healthy backends continue receiving traffic
+  - Failed backends removed from rotation
+  - No requests fail due to routing to known-bad backend
+  - Recovery is automatic when backend returns
+
+suggested_checks:
+  - name: partial_backend_failure
+    method: http
+
+  - name: traffic_rebalance
+    method: metrics
+
+  - name: recovery_rebalance
+    method: http
+
+
+evidence_to_capture:
+  - Backend health status timeline
+  - Request success/failure rate over time
+  - Traffic distribution per backend
+  - Time to detect failure and recover
+

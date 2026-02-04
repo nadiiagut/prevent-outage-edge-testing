@@ -1,0 +1,37 @@
+id: protocol.http.status
+title: HTTP Status Code Accuracy
+description: >
+  Response status codes must accurately reflect the outcome. Client errors
+  (4xx), server errors (5xx), and success (2xx) must be correctly
+  categorized. Masking errors as 200 breaks monitoring and clients.
+risk: high
+safe_in_prod: true
+
+required_signals:
+  - Client received status code
+  - Backend returned status code (if applicable)
+  - Proxy internal error state
+
+pass_criteria:
+  - Backend 5xx passes through as 5xx (or proxy-specific 502/504)
+  - Timeout produces 504 Gateway Timeout
+  - Connection refused produces 502 Bad Gateway
+  - Successful response returns backend status code
+
+suggested_checks:
+  - name: backend_error_passthrough
+    method: http
+
+  - name: timeout_status_code
+    method: http
+
+  - name: connection_refused_status
+    method: http
+
+
+evidence_to_capture:
+  - Client response status code
+  - Backend response status code
+  - Proxy error category (timeout, refused, reset)
+  - Access log termination state
+

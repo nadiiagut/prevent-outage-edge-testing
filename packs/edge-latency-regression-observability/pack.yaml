@@ -1,0 +1,286 @@
+# pack.yaml - edge-latency-regression-observability
+# Knowledge pack for latency regression detection using DTrace-like tooling.
+#
+# Provides privileged tracing (DTrace/eBPF) with safe simulator fallbacks.
+
+id: edge-latency-regression-observability
+name: Edge Latency Regression Observability
+version: "1.0.0"
+description: |
+  Tools and tests for detecting latency regressions at the edge using
+  system-level tracing (DTrace on macOS/Solaris, eBPF on Linux).
+  
+  Includes safe simulator fallbacks for environments without privileged access.
+  
+  Focus areas:
+  - P50/P95/P99 latency tracking
+  - Syscall latency attribution
+  - Network stack timing
+  - Request processing breakdown
+author: Edge Reliability Team
+tags:
+  - latency
+  - observability
+  - dtrace
+  - ebpf
+  - regression
+  - performance
+
+failure_modes:
+  - id: p99-latency-spike
+    name: P99 Latency Spike
+    description: |
+      99th percentile latency exceeds acceptable thresholds, impacting
+      user experience for tail requests.
+    severity: high
+    symptoms:
+      - P99 latency > 2x baseline
+      - Timeout errors increase
+      - User complaints about slow responses
+      - SLO breaches
+    root_causes:
+      - GC pauses
+      - Lock contention
+      - Slow downstream dependency
+      - Resource exhaustion (CPU, memory, connections)
+      - Cold cache after deployment
+    mitigation_strategies:
+      - Implement latency budgets per component
+      - Add circuit breakers for slow dependencies
+      - Pre-warm caches on deployment
+      - Profile with DTrace/eBPF to find hotspots
+    tags:
+      - latency
+      - p99
+      - slo
+
+  - id: syscall-latency-regression
+    name: Syscall Latency Regression
+    description: |
+      System call latency increases due to kernel, driver, or
+      configuration changes.
+    severity: medium
+    symptoms:
+      - Increased time in system calls
+      - Higher CPU system time percentage
+      - I/O wait increases
+    root_causes:
+      - Kernel upgrade with regression
+      - Filesystem mount option changes
+      - Network driver issues
+      - Security module overhead (SELinux, AppArmor)
+    mitigation_strategies:
+      - Baseline syscall latencies before changes
+      - Use DTrace/eBPF to attribute time
+      - Compare kernel versions
+    tags:
+      - syscall
+      - kernel
+      - regression
+
+  - id: connection-establishment-slow
+    name: Slow Connection Establishment
+    description: |
+      TCP connection establishment takes longer than expected,
+      increasing time-to-first-byte.
+    severity: high
+    symptoms:
+      - High connect() latency
+      - DNS resolution delays
+      - TLS handshake slowness
+      - Connection pool exhaustion
+    root_causes:
+      - DNS resolver issues
+      - TCP SYN retransmits
+      - TLS certificate chain validation
+      - Firewall/security group latency
+    mitigation_strategies:
+      - Implement connection pooling
+      - Use DNS caching
+      - Optimize TLS configuration
+      - Monitor connect latency separately
+    tags:
+      - network
+      - tcp
+      - tls
+
+  - id: request-queuing-delay
+    name: Request Queuing Delay
+    description: |
+      Requests spend excessive time in queue before processing begins.
+    severity: medium
+    symptoms:
+      - Time-to-first-byte much higher than processing time
+      - Worker thread/process pool saturation
+      - Request age metrics high
+    root_causes:
+      - Insufficient worker capacity
+      - Head-of-line blocking
+      - Uneven load distribution
+      - Slow request blocking queue
+    mitigation_strategies:
+      - Increase worker pool size
+      - Implement request prioritization
+      - Add queue depth monitoring
+      - Use async processing where possible
+    tags:
+      - queuing
+      - capacity
+
+test_templates:
+  - id: test-p99-baseline
+    name: P99 Latency Baseline Test
+    description: Establish and verify P99 latency baseline
+    failure_mode_id: p99-latency-spike
+    priority: high
+    setup_steps:
+      - Deploy test workload
+      - Warm up caches and connection pools
+      - Start latency collection
+    execution_steps:
+      - Send sustained traffic at expected rate for 5 minutes
+      - Collect latency histogram
+      - Calculate P50, P95, P99
+    assertions:
+      - description: P99 should be under threshold
+        expression: "percentile(latencies, 99) < p99_threshold_ms"
+      - description: P99/P50 ratio should be reasonable
+        expression: "percentile(latencies, 99) / percentile(latencies, 50) < 10"
+    cleanup_steps:
+      - Stop traffic generation
+      - Export latency data
+    tags:
+      - baseline
+      - p99
+    requires_privileged: false
+
+  - id: test-syscall-latency-dtrace
+    name: Syscall Latency Attribution (DTrace)
+    description: Use DTrace to measure syscall latencies
+    failure_mode_id: syscall-latency-regression
+    priority: medium
+    setup_steps:
+      - Verify DTrace availability (or use simulator)
+      - Identify target process
+      - Start DTrace script
+    execution_steps:
+      - Run workload for 60 seconds
+      - Collect syscall timing data
+      - Aggregate by syscall type
+    assertions:
+      - description: read() latency under threshold
+        expression: "avg_latency['read'] < 1000"  # microseconds
+      - description: write() latency under threshold
+        expression: "avg_latency['write'] < 1000"
+    cleanup_steps:
+      - Stop DTrace
+      - Save trace data
+    tags:
+      - dtrace
+      - syscall
+    requires_privileged: true
+    fallback_available: true
+
+  - id: test-connection-latency
+    name: Connection Establishment Latency
+    description: Measure TCP/TLS connection establishment time
+    failure_mode_id: connection-establishment-slow
+    priority: high
+    setup_steps:
+      - Configure target endpoints
+      - Disable connection pooling for test
+    execution_steps:
+      - Establish 100 new connections
+      - Measure connect time for each
+      - Measure TLS handshake time separately
+    assertions:
+      - description: Median connect time under 50ms
+        expression: "percentile(connect_times, 50) < 50"
+      - description: P99 connect time under 200ms
+        expression: "percentile(connect_times, 99) < 200"
+    cleanup_steps:
+      - Close all test connections
+      - Re-enable connection pooling
+    tags:
+      - connection
+      - tcp
+      - tls
+    requires_privileged: false
+
+recipes:
+  - id: dtrace-freebsd
+    name: DTrace Latency Tracing (FreeBSD/macOS)
+    path: recipes/dtrace-freebsd.md
+    description: |
+      Real DTrace commands and probes for measuring HTTP request latency.
+      Includes accept-to-close timing, syscall attribution, and CSV export.
+    platforms:
+      - freebsd
+      - macos
+      - solaris
+    requires_privileged: true
+
+  - id: bpftrace-linux
+    name: bpftrace Latency Tracing (Linux)
+    path: recipes/bpftrace-linux.md
+    description: |
+      bpftrace scripts for Linux systems when DTrace is unavailable.
+      Similar functionality using eBPF.
+    platforms:
+      - linux
+    requires_privileged: true
+
+  - id: simulation-mode
+    name: Simulation Mode (No Kernel Tracing)
+    path: recipes/simulation-mode.md
+    description: |
+      Fallback mode when privileged tracing is unavailable.
+      Parse application logs or generate synthetic latency data.
+    platforms:
+      - any
+    requires_privileged: false
+
+  - id: latency-histogram
+    name: Latency Histogram Analysis
+    path: recipes/latency-histogram.md
+    description: |
+      Techniques for collecting and visualizing latency distributions.
+    platforms:
+      - any
+    requires_privileged: false
+
+snippets:
+  - id: latency-analyzer
+    name: Latency Analyzer (Python)
+    path: snippets/latency_analyzer.py
+    language: python
+    description: |
+      Python tool for analyzing latency samples and detecting regressions.
+      Computes P50/P95/P99, compares with baseline, generates reports.
+    usage: |
+      python latency_analyzer.py --baseline baseline.csv --current current.csv \
+          --threshold-p99 20 --fail-on-regression
+
+  - id: syscall-latency-dtrace
+    name: Syscall Latency DTrace Script
+    path: snippets/syscall_latency.d
+    language: dtrace
+    description: |
+      DTrace script for measuring syscall latencies by type.
+    usage: |
+      sudo dtrace -s syscall_latency.d -p $(pgrep nginx)
+
+  - id: latency-simulator
+    name: Latency Simulator (Python)
+    path: snippets/latency_simulator.py
+    language: python
+    description: |
+      Generates synthetic latency data for testing analysis tools.
+    usage: |
+      python latency_simulator.py --count 10000 --base-latency 5.0 --p99-latency 50.0
+
+references:
+  - https://www.brendangregg.com/dtrace.html
+  - https://www.brendangregg.com/ebpf.html
+  - https://github.com/iovisor/bpftrace
+  - https://github.com/iovisor/bcc

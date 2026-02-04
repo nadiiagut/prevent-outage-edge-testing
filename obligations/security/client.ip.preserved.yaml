@@ -1,0 +1,38 @@
+id: security.client.ip.preserved
+title: True Client IP Preserved
+description: >
+  The original client IP must be accurately logged and forwarded to
+  backends via configured headers (X-Forwarded-For, X-Real-IP,
+  True-Client-IP). Spoofed headers from untrusted sources must be ignored.
+risk: medium
+safe_in_prod: true
+
+required_signals:
+  - Client TCP source IP
+  - X-Forwarded-For header (incoming and outgoing)
+  - Backend received client IP header
+  - Trusted proxy configuration
+
+pass_criteria:
+  - True client IP appears in access logs
+  - Backend receives correct client IP in configured header
+  - Spoofed XFF from untrusted client is stripped/replaced
+  - IPv6 addresses not truncated
+
+suggested_checks:
+  - name: xff_passthrough
+    method: headers
+
+  - name: xff_spoof_prevention
+    method: headers
+
+  - name: ipv6_preservation
+    method: headers
+
+
+evidence_to_capture:
+  - Client source IP (from connection)
+  - Incoming X-Forwarded-For header
+  - Outgoing X-Forwarded-For header
+  - Access log client IP field
+

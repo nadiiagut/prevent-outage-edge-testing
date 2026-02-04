@@ -1,0 +1,42 @@
+id: resilience.timeout.enforced
+title: Timeout Enforcement
+description: >
+  Connection and request timeouts must be enforced. Slow or hung backends
+  must not block proxy resources indefinitely. Timeouts must trigger
+  appropriate error responses.
+risk: high
+safe_in_prod: false
+
+assumptions:
+  - Timeout values are configured (connect, read, write)
+  - Test can simulate slow backend responses
+
+required_signals:
+  - Timeout configuration values
+  - Request duration
+  - Timeout trigger events in logs
+  - Response status code
+
+pass_criteria:
+  - Connect timeout triggers if backend unreachable within limit
+  - Read timeout triggers if no response within limit
+  - Timed-out requests return 504 Gateway Timeout
+  - Proxy resources released after timeout
+
+suggested_checks:
+  - name: connect_timeout
+    method: http
+
+  - name: read_timeout
+    method: http
+
+  - name: resource_release
+    method: metrics
+
+
+evidence_to_capture:
+  - Configured timeout values
+  - Actual request duration
+  - Response status code and body
+  - Backend connection state
+

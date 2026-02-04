@@ -1,0 +1,23 @@
+id: routing.backend.selection
+title: Backend Selection Consistency
+description: Same request characteristics must route to same backend consistently.
+risk: high
+safe_in_prod: true
+
+required_signals:
+  - Response header indicating selected backend
+  - Backend request logs
+
+pass_criteria:
+  - Identical requests route to same backend
+  - Hash key changes produce predictable backend changes
+
+suggested_checks:
+  - name: consistent_hash_stability
+    method: http
+  - name: weight_distribution
+    method: metrics
+
+evidence_to_capture:
+  - Backend server ID from response
+  - Request correlation ID

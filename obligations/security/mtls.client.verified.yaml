@@ -1,0 +1,46 @@
+id: security.mtls.client.verified
+title: mTLS Client Certificate Verified
+description: >
+  When mutual TLS is required, client certificates must be validated
+  against the configured CA trust store and must not be expired or
+  revoked.
+risk: high
+safe_in_prod: false
+
+assumptions:
+  - mTLS is enabled for the endpoint
+  - CA trust store is configured
+  - OCSP or CRL checking may be enabled
+
+required_signals:
+  - Client certificate presented
+  - CA trust store configuration
+  - OCSP/CRL revocation status
+  - Certificate validity dates
+
+pass_criteria:
+  - Client cert chains to configured CA
+  - Certificate is not expired
+  - Certificate is not revoked (if revocation checking enabled)
+  - Request rejected if verification fails
+
+suggested_checks:
+  - name: valid_client_cert
+    method: tcp
+
+  - name: wrong_ca_cert
+    method: tcp
+
+  - name: expired_client_cert
+    method: tcp
+
+  - name: revoked_cert_check
+    method: tcp
+
+
+evidence_to_capture:
+  - Client certificate (PEM)
+  - Verification result (success/failure reason)
+  - CA trust store fingerprints
+  - OCSP response if checked
+

@@ -1,0 +1,199 @@
+# packs/load_balancer.yaml
+# Knowledge pack for load balancer failure modes at the edge.
+
+id: load-balancer-failures
+name: Load Balancer Failures
+version: "1.0.0"
+description: |
+  Knowledge pack covering load balancer health check failures, connection draining,
+  sticky session issues, and backend pool management problems.
+author: Edge Reliability Team
+tags:
+  - load-balancer
+  - health-checks
+  - edge
+  - availability
+  - routing
+
+failure_modes:
+  - id: health-check-cascade
+    name: Health Check Cascade Failure
+    description: |
+      Overly aggressive health checks mark healthy backends as unhealthy,
+      causing cascading failures as remaining backends get overwhelmed.
+    severity: critical
+    symptoms:
+      - Multiple backends marked unhealthy simultaneously
+      - Remaining backends show increased latency
+      - Health check timeouts increase
+      - Complete pool failure despite healthy backends
+    root_causes:
+      - Health check timeout too aggressive
+      - Health check endpoint too resource-intensive
+      - Network latency spike misinterpreted as failure
+      - Shared dependency failure (DB, cache)
+    mitigation_strategies:
+      - Implement graduated health check thresholds
+      - Use lightweight dedicated health endpoints
+      - Separate liveness from readiness checks
+      - Implement circuit breaker on health checks
+    tags:
+      - availability
+      - health-checks
+
+  - id: connection-draining-failure
+    name: Connection Draining Failure
+    description: |
+      Connections not properly drained during backend removal,
+      causing request failures during deployments or scaling.
+    severity: high
+    symptoms:
+      - 502/503 errors during deployments
+      - Incomplete requests during scale-down
+      - WebSocket disconnections
+      - Long-running request failures
+    root_causes:
+      - Drain timeout too short
+      - No drain signal to backend
+      - Immediate removal without drain period
+      - Keep-alive connections not respected
+    mitigation_strategies:
+      - Configure adequate drain timeout
+      - Implement SIGTERM handling in backends
+      - Use connection tracking
+      - Monitor in-flight requests before removal
+    tags:
+      - deployments
+      - availability
+
+  - id: sticky-session-imbalance
+    name: Sticky Session Imbalance
+    description: |
+      Sticky sessions cause uneven load distribution,
+      with some backends overloaded while others are underutilized.
+    severity: medium
+    symptoms:
+      - Uneven CPU/memory across backends
+      - Some backends hitting limits while others idle
+      - User complaints from specific session cohorts
+      - Capacity planning difficulties
+    root_causes:
+      - Large sessions pinned to specific backends
+      - Session affinity without TTL
+      - No rebalancing mechanism
+      - Power users concentrated on few backends
+    mitigation_strategies:
+      - Implement session store externalization
+      - Add session TTL with graceful rebalancing
+      - Monitor session distribution metrics
+      - Consider consistent hashing for distribution
+    tags:
+      - performance
+      - capacity
+
+test_templates:
+  - id: test-health-check-resilience
+    name: Health Check Resilience Test
+    description: Verify health checks don't cascade during transient issues
+    failure_mode_id: health-check-cascade
+    priority: critical
+    setup_steps:
+      - Deploy 3 backend instances
+      - Configure load balancer with health checks
+      - Establish baseline traffic
+    execution_steps:
+      - Inject 500ms latency to health check endpoint on 1 backend
+      - Observe health check behavior
+      - Record backend pool state over 60 seconds
+    assertions:
+      - description: At most 1 backend should be marked unhealthy
+        expression: "unhealthy_backend_count <= 1"
+        expected: true
+      - description: No cascade to other backends
+        expression: "cascade_detected"
+        expected: false
+    cleanup_steps:
+      - Remove latency injection
+      - Verify all backends healthy
+    tags:
+      - health-checks
+      - resilience
+    estimated_duration_seconds: 120
+
+  - id: test-connection-draining
+    name: Connection Draining Test
+    description: Verify in-flight requests complete during backend removal
+    failure_mode_id: connection-draining-failure
+    priority: high
+    setup_steps:
+      - Start long-running request handler (30s response time)
+      - Establish 10 concurrent long-running requests
+    execution_steps:
+      - Initiate backend removal/drain
+      - Monitor request completion
+    assertions:
+      - description: All in-flight requests should complete
+        expression: "completed_requests == 10"
+        expected: true
+      - description: No 502 errors during drain
+        expression: "error_502_count == 0"
+        expected: true
+    cleanup_steps:
+      - Re-add backend to pool
+    tags:
+      - draining
+      - deployments
+    estimated_duration_seconds: 90
+
+observability_recipes:
+  - id: lb-health-observability
+    name: Load Balancer Health Monitoring
+    description: Metrics for load balancer health and backend pool status
+    failure_mode_ids:
+      - health-check-cascade
+      - connection-draining-failure
+      - sticky-session-imbalance
+    metrics:
+      - name: backend_health_status
+        type: gauge
+        description: Health status per backend (1=healthy, 0=unhealthy)
+        labels:
+          - backend_id
+          - pool_name
+      - name: active_connections
+        type: gauge
+        description: Active connections per backend
+        labels:
+          - backend_id
+      - name: health_check_duration_seconds
+        type: histogram
+        description: Health check latency
+        labels:
+          - backend_id
+      - name: requests_per_backend_total
+        type: counter
+        description: Request distribution across backends
+        labels:
+          - backend_id
+    log_patterns:
+      - name: backend_unhealthy
+        pattern: "backend.*unhealthy|health check failed"
+        severity: high
+        action: alert
+      - name: pool_exhausted
+        pattern: "no healthy backends|pool exhausted"
+        severity: critical
+        action: alert
+    alerts:
+      - name: BackendPoolDegraded
+        expr: "sum(backend_health_status) / count(backend_health_status) < 0.5"
+        for: 1m
+        severity: critical
+      - name: UnbalancedLoad
+        expr: "stddev(rate(requests_per_backend_total[5m])) > 100"
+        for: 5m
+        severity: warning
+
+references:
+  - https://docs.nginx.com/nginx/admin-guide/load-balancer/http-health-check/
+  - https://www.haproxy.com/blog/how-to-enable-health-checks-in-haproxy/
