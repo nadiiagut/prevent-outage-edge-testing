@@ -171,6 +171,28 @@ mappings:
       If ep_mock.history length > 1 for single request, retries occurred.
       Track backend attempt count to verify retry limits.
 
+  - internal_cluster: graceful_degradation
+    obligations:
+      - resilience.graceful.degradation
+    internal_signals:
+      - assertion: response served from cache when origin fails
+      - assertion: stale content returned with Warning header
+      - backup origin used on primary failure
+    notes: |
+      Tests verify system degrades gracefully under failure.
+      Includes: stale-while-revalidate, override-5xx, backup origin failover.
+
+  - internal_cluster: healthcheck_routing
+    obligations:
+      - routing.healthcheck.respect
+    internal_signals:
+      - assertion: unhealthy backend receives no traffic
+      - assertion: health check endpoint returns expected status
+      - fixture: backend health state
+    notes: |
+      Tests verify health check results affect routing decisions.
+      Unhealthy backends should be removed from rotation.
+
   # ============================================================================
   # OBSERVABILITY DOMAIN
   # ============================================================================
@@ -252,9 +274,9 @@ mappings:
       - routing.backend.selection
       - security.client.ip.preserved
     internal_signals:
-      - assertion: opts['x-custom'] == cc.winner.obj.history[0].request.headers['x-custom']
-      - assertion: 'x-internal-header' not in r.headers
-      - assertion: r.headers['x-origin-lbl'] == served_hosts[0]
+      - assertion: "opts['x-custom'] == cc.winner.obj.history[0].request.headers['x-custom']"
+      - assertion: "'x-internal-header' not in r.headers"
+      - assertion: "r.headers['x-origin-lbl'] == served_hosts[0]"
     notes: |
       Tests verify headers forwarded to backend and stripped from response.
       x-origin-lbl → x-backend-id in portable terms.
