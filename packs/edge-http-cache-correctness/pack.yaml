@@ -120,13 +120,13 @@ test_templates:
     failure_mode_id: vary-header-cache-split
     priority: critical
     setup_steps:
-      - Configure origin to return Vary: Accept-Encoding
-      - Clear edge cache
+      - "Configure origin to return Vary: Accept-Encoding"
+      - "Clear edge cache"
     execution_steps:
-      - Request with Accept-Encoding: gzip
-      - Record response and cache status
-      - Request with Accept-Encoding: identity
-      - Record response and cache status
+      - "Request with Accept-Encoding: gzip"
+      - "Record response and cache status"
+      - "Request with Accept-Encoding: identity"
+      - "Record response and cache status"
     assertions:
       - description: Gzip request should receive gzip-encoded response
         expression: "response1.headers['content-encoding'] == 'gzip'"
@@ -170,9 +170,9 @@ test_templates:
     failure_mode_id: stale-on-revalidate-fail
     priority: high
     setup_steps:
-      - Configure origin with Cache-Control: max-age=1, stale-while-revalidate=60
-      - Populate cache
-      - Wait for max-age to expire
+      - "Configure origin with Cache-Control: max-age=1, stale-while-revalidate=60"
+      - "Populate cache"
+      - "Wait for max-age to expire"
     execution_steps:
       - Send request (should trigger async revalidation)
       - Record response time and content

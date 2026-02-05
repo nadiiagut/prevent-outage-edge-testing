@@ -250,9 +250,7 @@ recipes:
     requires_privileged: false
 
 snippets:
-  - id: latency-analyzer
-    name: Latency Analyzer (Python)
-    path: snippets/latency_analyzer.py
+  - filename: latency_analyzer.py
     language: python
     description: |
       Python tool for analyzing latency samples and detecting regressions.
@@ -261,18 +259,14 @@ snippets:
       python latency_analyzer.py --baseline baseline.csv --current current.csv \
           --threshold-p99 20 --fail-on-regression
 
-  - id: syscall-latency-dtrace
-    name: Syscall Latency DTrace Script
-    path: snippets/syscall_latency.d
+  - filename: syscall_latency.d
     language: dtrace
     description: |
       DTrace script for measuring syscall latencies by type.
     usage: |
       sudo dtrace -s syscall_latency.d -p $(pgrep nginx)
 
-  - id: latency-simulator
-    name: Latency Simulator (Python)
-    path: snippets/latency_simulator.py
+  - filename: latency_simulator.py
     language: python
     description: |
       Generates synthetic latency data for testing analysis tools.

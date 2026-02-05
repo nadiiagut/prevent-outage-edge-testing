@@ -280,9 +280,7 @@ recipes:
     requires_privileged: false
 
 snippets:
-  - id: fault-inject-c
-    name: libfaultinject.so (C)
-    path: snippets/fault_inject.c
+  - filename: fault_inject.c
     language: c
     description: |
       LD_PRELOAD shared library that intercepts connect(), send(), recv(),
@@ -304,9 +302,7 @@ snippets:
       LD_PRELOAD=./libfaultinject.so \
       python my_test.py
 
-  - id: socket-fault-injector
-    name: Socket Fault Injector (Python)
-    path: snippets/socket_fault_injector.py
+  - filename: socket_fault_injector.py
     language: python
     description: |
       Pure Python socket wrapper for fault injection. Use when LD_PRELOAD
@@ -319,9 +315,7 @@ snippets:
           response = requests.get("http://api.example.com")
       print(fi.stats)
 
-  - id: fault-simulator
-    name: Fault Simulator (Python)
-    path: snippets/fault_simulator.py
+  - filename: fault_simulator.py
     language: python
     description: |
       High-level fault simulation for testing without modifying application code.
