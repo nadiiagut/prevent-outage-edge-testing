@@ -39,18 +39,10 @@ pip install -e "."
 poet init
 ```
 
-### 2. Build a Test Plan from Jira
+### 2. Build a Test Plan
 
 ```bash
-poet build --jira-text "Add stale-while-revalidate support for /api/* endpoints. 
-When cache is stale, serve stale content while revalidating in background.
-Must not cause thundering herd on origin."
-```
-
-Or from a file:
-
-```bash
-poet build --jira-file feature.txt --title "SWR Support" --jira-key CACHE-123
+poet build --jira-text "Add cache bypass for authenticated requests."
 ```
 
 ### 3. Review Outputs
@@ -59,7 +51,6 @@ poet build --jira-file feature.txt --title "SWR Support" --jira-key CACHE-123
 ls generated/
 # TESTPLAN.md          - Structured test plan
 # tests/               - Pytest starter files
-# snippets/            - Code helpers
 # observability/       - Monitoring recipes
 ```
 
@@ -69,6 +60,62 @@ ls generated/
 poet gate run --all
 poet gate report
 ```
+
+---
+
+## Use POET with Jira Tickets
+
+Generate a test plan directly from a Jira ticket:
+
+### Option A: Paste ticket content
+
+```bash
+poet build --jira-text "
+EDGE-234: Purge propagation fix
+
+Description: Updated purge logic to reduce stale data after invalidation.
+
+Acceptance Criteria:
+- No stale content served after purge completes
+- Cache headers remain valid
+- Purge propagates to all edge nodes within 30 seconds
+"
+```
+
+### Option B: Export ticket to markdown file
+
+Save your ticket as `EDGE-234.md`, then:
+
+```bash
+poet build --jira-file ./EDGE-234.md --jira-key EDGE-234
+```
+
+### Option C: Jira API (if configured)
+
+```bash
+export JIRA_TOKEN="your-api-token"
+poet build --jira-key EDGE-234 \
+           --jira-url https://example.atlassian.net \
+           --jira-token-env JIRA_TOKEN
+```
+
+### Expected Ticket Fields
+
+| Field | Required | Used For |
+|-------|----------|----------|
+| **Summary/Title** | Yes | Test plan title, keyword extraction |
+| **Description** | Yes | Feature analysis, pack selection |
+| **Acceptance Criteria** | Recommended | Assertion generation |
+| **Components** | Optional | Domain detection (cache, routing) |
+| **Labels** | Optional | Pack filtering |
+
+### See Pack Selection Reasoning
+
+```bash
+poet build --jira-text "..." --explain
+```
+
+📖 **[Full Jira Guide](docs/jira.md)** — Troubleshooting, field mapping, API setup
 
 ---
 
