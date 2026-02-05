@@ -157,7 +157,7 @@ paths:
 
 ### Limitations
 
-- 🚧 **Status: Planned** — Not yet implemented
+- 🧪 **Status: Experimental** — Basic support available
 - Will focus on HTTP contract testing, not business logic
 - Requires well-documented OpenAPI spec with response schemas
 
@@ -374,12 +374,12 @@ poet build --openapi api.yaml --jira-file feature.md
 # Jira (see docs/jira.md for details)
 poet build --jira-text "..."
 poet build --jira-file ticket.md
-poet build --jira-key PROJ-123 --jira-url ... --jira-token-env JIRA_TOKEN
+# poet build --jira-key PROJ-123 --jira-url ... (planned)
 
 # Markdown spec
 poet build --jira-file feature-spec.md
 
-# OpenAPI (planned)
+# OpenAPI (experimental)
 poet build --openapi api.yaml
 
 # System profile

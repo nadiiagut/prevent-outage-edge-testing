@@ -23,27 +23,21 @@ Acceptance criteria:
 
 ---
 
-### B) Jira API (Token-Based)
+### B) Jira API (Planned)
 
-Fetch ticket content directly from Jira using the API. Requires a Jira API token.
+> 🚧 **Coming soon** — Direct Jira API integration is on the roadmap.
+
+Once implemented, you'll be able to fetch tickets directly:
 
 ```bash
-# Set your token as an environment variable
+# Future syntax (not yet implemented)
 export JIRA_TOKEN="your-api-token-here"
-
-# Fetch and build
 poet build --jira-key EDGE-123 \
            --jira-url https://yourcompany.atlassian.net \
            --jira-token-env JIRA_TOKEN
 ```
 
-**Setup:**
-
-1. Generate an API token at https://id.atlassian.com/manage-profile/security/api-tokens
-2. Store it securely (environment variable, secrets manager)
-3. Never commit tokens to git
-
-**Best for:** CI/CD pipelines, batch processing multiple tickets.
+**For now:** Export your ticket to markdown and use `--jira-file` (Option C below).
 
 ---
 
@@ -137,24 +131,22 @@ poet build --jira-file specs/EDGE-456.md \
            --output ./generated/edge-456
 ```
 
-### Example 3: Jira API with CI/CD
+### Example 3: CI/CD with Exported Tickets
 
 ```bash
-# In CI pipeline (token from secrets)
-poet build --jira-key $JIRA_TICKET \
-           --jira-url $JIRA_URL \
-           --jira-token-env JIRA_TOKEN \
+# In CI pipeline (ticket exported to file)
+poet build --jira-file ./specs/$JIRA_TICKET.md \
+           --jira-key $JIRA_TICKET \
            --output ./test-plans/$JIRA_TICKET
 ```
 
-### Example 4: Batch Processing
+### Example 4: Batch Processing (with exported files)
 
 ```bash
-# Process multiple tickets
+# Process multiple exported tickets
 for ticket in EDGE-100 EDGE-101 EDGE-102; do
-  poet build --jira-key $ticket \
-             --jira-url https://company.atlassian.net \
-             --jira-token-env JIRA_TOKEN \
+  poet build --jira-file ./specs/$ticket.md \
+             --jira-key $ticket \
              --output ./plans/$ticket
 done
 ```

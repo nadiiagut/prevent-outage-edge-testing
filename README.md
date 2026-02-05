@@ -45,14 +45,13 @@ poet init
 poet build --jira-text "Add cache bypass for authenticated requests."
 ```
 
-### 3. Review Outputs
+### 3. See Your Test Plan
 
 ```bash
-ls generated/
-# TESTPLAN.md          - Structured test plan
-# tests/               - Pytest starter files
-# observability/       - Monitoring recipes
+cat generated/TESTPLAN.md
 ```
+
+You'll see failure modes, test cases, and assertions — generated in seconds.
 
 ### 4. Run Release Gates
 
@@ -90,14 +89,10 @@ Save your ticket as `EDGE-234.md`, then:
 poet build --jira-file ./EDGE-234.md --jira-key EDGE-234
 ```
 
-### Option C: Jira API (if configured)
+### Option C: Jira API (planned)
 
-```bash
-export JIRA_TOKEN="your-api-token"
-poet build --jira-key EDGE-234 \
-           --jira-url https://example.atlassian.net \
-           --jira-token-env JIRA_TOKEN
-```
+> 🚧 **Coming soon** — Direct Jira API integration is on the roadmap.
+> For now, export your ticket to markdown and use `--jira-file`.
 
 ### Expected Ticket Fields
 
@@ -162,9 +157,9 @@ git push
 |------|---------|--------|
 | **Jira text** | `poet build --jira-text "..."` | ✅ Supported |
 | **Jira file** | `poet build --jira-file spec.txt` | ✅ Supported |
-| **Jira API** | `poet build --jira-key PROJ-123 --jira-url ...` | ✅ Supported |
+| **Jira API** | `poet build --jira-key PROJ-123 --jira-url ...` | 🚧 Planned |
 | **Markdown spec** | `poet build --jira-file spec.md` | ✅ Supported |
-| **OpenAPI/Swagger** | `poet build --openapi api.yaml` | 🚧 Planned |
+| **OpenAPI/Swagger** | `poet build --openapi api.yaml` | 🧪 Experimental |
 | **Config profile** | `poet build --config nginx.conf` | 🚧 Planned |
 | **Existing tests** | `poet learn from-tests ./tests/` | ✅ Supported (maintainers) |
 
@@ -293,7 +288,7 @@ poet packs validate                    # Validate all packs
 # Build test plans (USERS)
 poet build --jira-text "..."           # From inline text
 poet build --jira-file spec.md         # From file (txt, md)
-poet build --openapi api.yaml          # From OpenAPI spec (experimental)
+poet build --openapi api.yaml          # From OpenAPI spec (🧪 experimental)
 poet build --obligations "cache.*"     # Direct obligation selection
 poet build --packs edge-http-cache-correctness  # Specific packs
 poet build --explain                   # Show pack selection reasoning
@@ -317,11 +312,11 @@ poet learn show --section fixtures     # Show specific section
 
 ## Roadmap
 
-- [x] OpenAPI/Swagger input mode (experimental)
+- [x] OpenAPI/Swagger input mode (🧪 experimental)
+- [ ] Jira API integration (direct fetch from Jira)
 - [ ] Config file analysis (nginx.conf, haproxy.cfg)
 - [ ] Additional demo environments (HAProxy, Envoy)
 - [ ] Evidence viewer UI
-- [ ] Jira API integration
 
 ---
 
