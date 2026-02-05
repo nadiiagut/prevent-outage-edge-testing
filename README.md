@@ -2,139 +2,281 @@
 
 **P**ortable **O**bligation **E**vidence **T**esting
 
-A knowledge amplifier that transfers senior outage experience into reusable testing obligations, evidence requirements, and release gates.
+POET helps you build test plans and release gates from feature descriptions. It encodes senior engineering knowledge about edge proxy failure modes into reusable obligations, then matches your feature to relevant test cases, observability recipes, and evidence requirements.
 
-> **This tool does not prevent outages.** It structures release confidence using obligations and evidence. It is not a test generator—it helps you understand *what* to test and *what evidence* to capture.
+> 🚀 **New here?** Start with the **[First 10 Minutes Guide](docs/first-10-minutes.md)** — install, build, and run gates in one walkthrough.
 
-## What You Get
+---
 
-- **Obligations**: Portable definitions of what must be true (e.g., "same request routes to same backend")
-- **Evidence requirements**: What to capture for debugging (logs, metrics, packet captures)
-- **Release gates**: Pass/fail checks before deployment
+## What POET is NOT
 
-Preview real outputs: [examples/](examples/)
-- [TESTPLAN.cache-change.md](examples/TESTPLAN.cache-change.md) - Generated test plan
-- [observability_runbook.md](examples/observability_runbook.md) - What signals to collect
-- [gate_report.json](examples/gate_report.json) - Release gate results
+- **Not a zero-outage guarantee** — POET structures confidence, it doesn't eliminate risk
+- **Not code coverage** — Obligation coverage means "every selected obligation has evidence," not "every line is tested"
+- **Not a test generator** — POET tells you *what* to test and *what evidence* to capture; you write the tests
+- **Not AI magic** — Knowledge comes from real legacy test suites, curated by humans
 
-## Quick Start (Users)
+---
 
-Users consume obligations and run gates. No legacy test suite required.
+## Concepts
+
+| Term | Definition |
+|------|------------|
+| **Obligation** | A portable rule that must be true (e.g., "same request routes to same backend"). |
+| **Evidence** | Artifacts proving an obligation is met (logs, metrics, packet captures). |
+| **Pack** | A bundle of failure modes, test templates, and recipes for a specific domain. |
+| **Gate** | A pass/fail check that runs before deployment, verifying obligations have evidence. |
+
+---
+
+## Quick Start — FOR USERS
+
+Users build test plans from feature descriptions. No legacy tests required.
+
+### 1. Install
 
 ```bash
-# 1. Install
 pip install -e "."
-
-# 2. Try the demo environment
-cd demo && make up
-
-# 3. Initialize and run gates
 poet init
-poet obligations list
+```
+
+### 2. Build a Test Plan from Jira
+
+```bash
+poet build --jira-text "Add stale-while-revalidate support for /api/* endpoints. 
+When cache is stale, serve stale content while revalidating in background.
+Must not cause thundering herd on origin."
+```
+
+Or from a file:
+
+```bash
+poet build --jira-file feature.txt --title "SWR Support" --jira-key CACHE-123
+```
+
+### 3. Review Outputs
+
+```bash
+ls generated/
+# TESTPLAN.md          - Structured test plan
+# tests/               - Pytest starter files
+# snippets/            - Code helpers
+# observability/       - Monitoring recipes
+```
+
+### 4. Run Release Gates
+
+```bash
 poet gate run --all
+poet gate report
 ```
 
-## Demo Environment
+---
 
-A Docker-based NGINX edge proxy with upstreams for testing obligations locally:
+## Quick Start — FOR MAINTAINERS
 
-```bash
-cd demo
-make up      # Start NGINX edge + 2 upstreams + 1 faulty upstream
-make test    # Run basic obligation checks
-make down    # Stop
-```
+Maintainers extract knowledge from legacy test suites and commit it for users.
 
-See [demo/README.md](demo/README.md) for details.
-
-## Top Obligations for Edge Proxies
-
-| Obligation | What It Checks | Risk |
-|------------|----------------|------|
-| `routing.backend.selection` | Same request → same backend | high |
-| `routing.fanout.bound` | Retries don't amplify load | high |
-| `cache.vary.honored` | Vary header respected | high |
-| `protocol.http.status` | Correct 5xx on failures | high |
-| `resilience.timeout.enforced` | Slow backends don't block | high |
-| `observability.access.logged` | Every request logged | high |
-
-Run `poet obligations list` for all 17 obligations.
-
-## Maintainer Workflow
-
-Maintainers extract knowledge from existing test suites and commit it for users.
+### 1. Learn from Existing Tests
 
 ```bash
-# Extract patterns from legacy tests (maintainer only)
 poet learn from-tests /path/to/legacy/tests/
+```
 
-# Review extracted knowledge
+### 2. Review Extracted Knowledge
+
+```bash
+poet learn show
 cat knowledge/learned/*.json
+```
 
-# Commit to repo for users
+### 3. Commit for Users
+
+```bash
 git add knowledge/learned/
 git commit -m "Add learned patterns from project X"
+git push
 ```
 
-Users do NOT need access to legacy tests—they use the committed knowledge.
+**Users never need access to legacy tests** — they use the committed knowledge.
 
-## Obligation Coverage
+---
 
-**"100% obligation coverage"** = every selected obligation has at least one passing test with evidence.
+## Supported Input Modes
 
-Evidence may include:
-- Access logs with cache status, backend ID, timing
-- Prometheus metrics snapshots
-- Request/response captures
-- Packet captures (tcpdump) for protocol issues
+| Mode | Command | Status |
+|------|---------|--------|
+| **Jira text** | `poet build --jira-text "..."` | ✅ Supported |
+| **Jira file** | `poet build --jira-file spec.txt` | ✅ Supported |
+| **Jira API** | `poet build --jira-key PROJ-123 --jira-url ...` | ✅ Supported |
+| **Markdown spec** | `poet build --jira-file spec.md` | ✅ Supported |
+| **OpenAPI/Swagger** | `poet build --openapi api.yaml` | 🚧 Planned |
+| **Config profile** | `poet build --config nginx.conf` | 🚧 Planned |
+| **Existing tests** | `poet learn from-tests ./tests/` | ✅ Supported (maintainers) |
 
-This is NOT:
-- Code coverage
-- A guarantee of zero outages
-- AI writing tests for you
+📖 **[Full Jira Integration Guide](docs/jira.md)** — Three ways to use Jira, pack selection, troubleshooting
 
-## Directory Structure
+📖 **[All Input Modes](docs/inputs.md)** — Markdown specs, OpenAPI, system profiles, direct selection
+
+---
+
+## Output Artifacts
+
+| Artifact | Location | Description |
+|----------|----------|-------------|
+| `TESTPLAN.md` | `generated/TESTPLAN.md` | Structured test plan with failure modes, test cases, assertions |
+| `tests/` | `generated/tests/` | Pytest starter files (you complete them) |
+| `observability/` | `generated/observability/` | Runbooks for what signals to collect |
+| `snippets/` | `generated/snippets/` | Code helpers (latency analyzer, fault injector) |
+| Gate report | `.poet/reports/latest.json` | Pass/fail results with evidence paths |
+
+📖 **[Output Artifacts Guide](docs/outputs.md)** — TESTPLAN structure, test scaffolds, runbooks, gate reports
+
+---
+
+## Full Example: Jira → Test Plan
+
+**Input** (Jira description):
 
 ```
-├── obligations/       # Portable obligation specs (YAML) - THE CORE PRODUCT
-├── examples/          # Real POET output examples
-├── demo/              # Docker-based test environment
-├── mappings/          # Internal pattern → obligation mappings
-├── packs/             # Knowledge packs (failure modes, recipes)
-├── knowledge/learned/ # Extracted patterns (git-ignored, maintainer-generated)
-├── .poet/             # Local runtime data (git-ignored)
-│   ├── evidence/      # Captured evidence per test run
-│   └── reports/       # Gate reports (JSON, HTML)
-└── src/               # CLI and library code
+Add cache bypass for authenticated requests.
+
+Acceptance criteria:
+- Requests with Authorization header must not be served from cache
+- Requests without Authorization header should use normal caching
+- Cache-Control: private responses must not be cached
 ```
 
-### What goes where
-
-| Directory | Committed? | Who creates it |
-|-----------|------------|----------------|
-| `obligations/` | Yes | Project maintainers |
-| `examples/` | Yes | Project maintainers |
-| `knowledge/learned/` | No (git-ignored) | Maintainers run `poet learn` |
-| `.poet/` | No (git-ignored) | CLI creates at runtime |
-
-## CLI Commands
+**Command**:
 
 ```bash
-poet init                    # Detect system capabilities
-poet obligations list        # List all obligations
-poet obligations show <id>   # Show obligation details
-poet gate run --all          # Run all release gates
-poet gate report             # Show latest gate report
-poet learn from-tests <path> # Extract patterns (maintainers)
+poet build --jira-text "Add cache bypass for authenticated requests.
+
+Acceptance criteria:
+- Requests with Authorization header must not be served from cache
+- Requests without Authorization header should use normal caching
+- Cache-Control: private responses must not be cached" \
+  --title "Auth Cache Bypass" --jira-key CACHE-456
 ```
+
+**Outputs**:
+
+```
+generated/
+├── TESTPLAN.md              # 3 test cases covering cache bypass
+├── tests/
+│   └── test_cache_bypass.py # Pytest starters
+├── observability/
+│   └── cache-metrics.md     # What Prometheus metrics to check
+└── snippets/
+    └── cache_validator.py   # Helper to verify cache headers
+```
+
+**TESTPLAN.md excerpt**:
+
+```markdown
+## Test Cases
+
+### 1. Authorization Header Bypasses Cache
+**Priority:** critical
+**Failure Mode:** `cache-key-collision`
+
+**Assertions:**
+- [ ] Request with Authorization header returns X-Cache: MISS
+- [ ] Subsequent identical request also returns X-Cache: MISS
+- [ ] Request without Authorization returns X-Cache: HIT (after warm)
+```
+
+---
+
+## Repository Layout
+
+```
+├── obligations/           # Portable obligation specs (YAML) — COMMITTED
+├── packs/                 # Knowledge packs (failure modes, recipes) — COMMITTED
+├── mappings/              # Internal pattern → obligation mappings — COMMITTED
+├── examples/              # Sample POET outputs — COMMITTED
+├── demo/                  # Docker test environment — COMMITTED
+├── knowledge/
+│   └── learned/           # Extracted patterns — GIT-IGNORED (maintainer-generated)
+├── .poet/                 # Runtime data — GIT-IGNORED (CLI creates)
+│   ├── evidence/          # Captured evidence per test run
+│   └── reports/           # Gate reports (JSON, HTML)
+└── src/                   # CLI and library code — COMMITTED
+```
+
+### What Gets Committed?
+
+| Directory | Committed? | Who Creates It |
+|-----------|------------|----------------|
+| `obligations/` | ✅ Yes | Project maintainers |
+| `packs/` | ✅ Yes | Project maintainers |
+| `examples/` | ✅ Yes | Project maintainers |
+| `knowledge/learned/` | ❌ No | `poet learn` (maintainers only) |
+| `.poet/` | ❌ No | CLI at runtime |
+
+---
+
+## CLI Reference
+
+```bash
+# Setup
+poet init                              # Detect system capabilities
+
+# Browse obligations
+poet obligations list                  # List all 17 obligations
+poet obligations list --domain cache   # Filter by domain
+poet obligations show <id>             # Show obligation details
+
+# Browse packs
+poet packs list                        # List all knowledge packs
+poet packs show <pack-id>              # Show pack details
+poet packs validate                    # Validate all packs
+
+# Build test plans (USERS)
+poet build --jira-text "..."           # From inline text
+poet build --jira-file spec.md         # From file (txt, md)
+poet build --openapi api.yaml          # From OpenAPI spec (experimental)
+poet build --obligations "cache.*"     # Direct obligation selection
+poet build --packs edge-http-cache-correctness  # Specific packs
+poet build --explain                   # Show pack selection reasoning
+poet build --title "My Feature"        # Set title
+poet build --jira-key PROJ-123         # Set Jira key
+
+# Run gates (USERS)
+poet gate list                         # List available gates
+poet gate run --all                    # Run all gates
+poet gate run --gate contract          # Run specific gate
+poet gate report                       # Show latest report
+poet gate report --json                # JSON output
+
+# Learn from tests (MAINTAINERS)
+poet learn from-tests /path/to/tests/  # Extract patterns
+poet learn show                        # Display learned patterns
+poet learn show --section fixtures     # Show specific section
+```
+
+---
 
 ## Roadmap
 
+- [x] OpenAPI/Swagger input mode (experimental)
+- [ ] Config file analysis (nginx.conf, haproxy.cfg)
 - [ ] Additional demo environments (HAProxy, Envoy)
-- [ ] HAProxy ↔ NGINX obligation translation
-- [ ] Baseline/performance budget tooling
-- [ ] Better pack explainability (why this obligation matters)
 - [ ] Evidence viewer UI
+- [ ] Jira API integration
+
+---
+
+## Contributing
+
+1. Fork the repo
+2. Create a feature branch
+3. Add tests for new functionality
+4. Submit a PR
+
+For knowledge contributions, run `poet learn from-tests` on your test suite and submit the sanitized `knowledge/learned/*.json` files.
+
+---
 
 ## License
 

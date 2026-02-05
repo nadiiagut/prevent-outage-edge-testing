@@ -26,24 +26,28 @@ app = typer.Typer(help="Run release gates and generate reports")
 console = Console()
 
 
-def _status_style(status: GateStatus) -> str:
+def _status_style(status) -> str:
     """Get rich style for status."""
+    status_str = status.value if hasattr(status, 'value') else str(status)
     return {
-        GateStatus.PASSED: "green",
-        GateStatus.FAILED: "red",
-        GateStatus.SKIPPED: "yellow",
-        GateStatus.ERROR: "red bold",
-    }.get(status, "white")
+        "passed": "green",
+        "failed": "red",
+        "partial": "yellow",
+        "skipped": "dim yellow",
+        "error": "red bold",
+    }.get(status_str.lower(), "white")
 
 
-def _status_icon(status: GateStatus) -> str:
+def _status_icon(status) -> str:
     """Get icon for status."""
+    status_str = status.value if hasattr(status, 'value') else str(status)
     return {
-        GateStatus.PASSED: "✓",
-        GateStatus.FAILED: "✗",
-        GateStatus.SKIPPED: "−",
-        GateStatus.ERROR: "⚠",
-    }.get(status, "?")
+        "passed": "✓ PASS",
+        "failed": "✗ FAIL",
+        "partial": "◐ PARTIAL",
+        "skipped": "− SKIP",
+        "error": "⚠ ERROR",
+    }.get(status_str.lower(), "?")
 
 
 @app.command("list")
@@ -141,17 +145,29 @@ def run_gates(
         console.print(json_lib.dumps(report.to_dict(), indent=2))
         raise typer.Exit(0 if report.overall_status == GateStatus.PASSED else 1)
     
-    # Print results
+    # Print results per gate
     for gate_result in report.gates:
         style = _status_style(gate_result.status)
         icon = _status_icon(gate_result.status)
         
-        tree = Tree(f"[{style}]{icon} {gate_result.gate_name}[/{style}] ({gate_result.gate_id})")
+        tree = Tree(f"[{style}]{icon}[/{style}] {gate_result.gate_name} ({gate_result.gate_id})")
         
         for check in gate_result.checks:
             check_style = _status_style(check.status)
             check_icon = _status_icon(check.status)
-            tree.add(f"[{check_style}]{check_icon}[/{check_style}] {check.name}: {check.message[:60]}")
+            check_node = tree.add(f"[{check_style}]{check_icon}[/{check_style}] {check.name}")
+            
+            # Show message
+            if check.message:
+                check_node.add(f"[dim]{check.message[:80]}[/dim]")
+            
+            # Show evidence artifacts if available
+            if hasattr(check, 'evidence') and check.evidence:
+                evidence_node = check_node.add("[dim]Evidence:[/dim]")
+                for ev in check.evidence[:3]:
+                    evidence_node.add(f"[dim cyan]{ev}[/dim cyan]")
+                if len(check.evidence) > 3:
+                    evidence_node.add(f"[dim]... and {len(check.evidence) - 3} more[/dim]")
         
         console.print(tree)
         console.print()

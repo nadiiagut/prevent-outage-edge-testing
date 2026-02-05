@@ -34,7 +34,16 @@ def build_command(
         None, "--jira-text", "-j", help="Jira feature description text"
     ),
     jira_file: Optional[Path] = typer.Option(
-        None, "--jira-file", "-f", help="File containing Jira description"
+        None, "--jira-file", "-f", help="File containing Jira/markdown description"
+    ),
+    openapi: Optional[Path] = typer.Option(
+        None, "--openapi", help="OpenAPI/Swagger spec file (YAML or JSON)"
+    ),
+    obligations: Optional[str] = typer.Option(
+        None, "--obligations", help="Obligation patterns to include (e.g., 'cache.*')"
+    ),
+    packs_filter: Optional[str] = typer.Option(
+        None, "--packs", help="Specific packs to use (comma-separated)"
     ),
     output_dir: Path = typer.Option(
         Path("generated"), "--output", "-o", help="Output directory"
@@ -45,6 +54,9 @@ def build_command(
     jira_key: Optional[str] = typer.Option(
         None, "--jira-key", "-k", help="Jira issue key (e.g., PROJ-123)"
     ),
+    explain: bool = typer.Option(
+        False, "--explain", "-e", help="Show pack selection explanation"
+    ),
     include_snippets: bool = typer.Option(
         True, "--snippets/--no-snippets", help="Include code snippets"
     ),
@@ -52,22 +64,56 @@ def build_command(
         True, "--recipes/--no-recipes", help="Include observability recipes"
     ),
 ) -> None:
-    """Build test plan and starter tests from Jira feature description."""
+    """
+    Build test plan and starter tests from feature description.
+    
+    Input modes:
+      --jira-text    Inline Jira/feature description
+      --jira-file    File containing description (txt, md)
+      --openapi      OpenAPI/Swagger spec file
+      --obligations  Direct obligation selection (e.g., 'cache.*')
+      --packs        Specific packs to use
+    
+    Examples:
+      poet build --jira-text "Add cache bypass..."
+      poet build --jira-file feature.md --title "My Feature"
+      poet build --openapi api.yaml
+      poet build --obligations "cache.*,routing.*"
+      poet build --jira-file spec.md --explain
+    """
     
     # Get description text
-    if jira_file:
+    description = ""
+    input_mode = "unknown"
+    
+    if openapi:
+        if not openapi.exists():
+            console.print(f"[red]File not found: {openapi}[/red]")
+            raise typer.Exit(1)
+        # For now, extract paths from OpenAPI as description
+        console.print(f"[yellow]OpenAPI support is experimental[/yellow]")
+        description = f"OpenAPI spec: {openapi.name}\n\n" + openapi.read_text()[:2000]
+        input_mode = "openapi"
+    elif jira_file:
         if not jira_file.exists():
             console.print(f"[red]File not found: {jira_file}[/red]")
             raise typer.Exit(1)
         description = jira_file.read_text()
+        input_mode = "file"
     elif jira_text:
         description = jira_text
+        input_mode = "text"
+    elif obligations or packs_filter:
+        # Direct selection mode - no description needed
+        description = f"Direct selection: obligations={obligations}, packs={packs_filter}"
+        input_mode = "direct"
     else:
-        console.print("[yellow]Enter Jira feature description (Ctrl+D to end):[/yellow]")
+        console.print("[yellow]Enter feature description (Ctrl+D to end):[/yellow]")
         import sys
         description = sys.stdin.read()
+        input_mode = "stdin"
     
-    if not description.strip():
+    if not description.strip() and input_mode not in ("direct",):
         console.print("[red]No description provided[/red]")
         raise typer.Exit(1)
     
@@ -129,6 +175,10 @@ def build_command(
                 recipe_path = recipes_dir / f"{recipe.id}.md"
                 recipe_path.write_text(recipe.to_markdown())
             progress.update(task, completed=True)
+    
+    # Show explanation if requested
+    if explain:
+        _print_explanation(result, description)
     
     # Summary
     console.print()
@@ -211,6 +261,116 @@ def _write_testplan_md(path: Path, result, description: str) -> None:
     ])
     
     path.write_text("\n".join(lines))
+
+
+def _print_explanation(result, description: str) -> None:
+    """Print pack selection explanation."""
+    from rich.table import Table
+    from rich.tree import Tree
+    
+    console.print()
+    console.print(Panel("[bold]Pack Selection Explanation[/bold]", style="cyan"))
+    
+    # Extract keywords from description
+    keywords = _extract_keywords(description)
+    
+    # Show matched keywords
+    console.print("\n[bold]Matched Keywords:[/bold]")
+    if keywords:
+        for kw, packs in keywords.items():
+            pack_names = ", ".join(packs)
+            console.print(f"  • \"{kw}\" → {pack_names}")
+    else:
+        console.print("  [dim]No domain keywords detected[/dim]")
+    
+    # Show selected packs with reasons
+    console.print("\n[bold]Selected Packs:[/bold]")
+    if result.matched_packs:
+        for pack in result.matched_packs:
+            tree = Tree(f"[green]✓ {pack.name}[/green] ({pack.id})")
+            if hasattr(pack, 'failure_modes') and pack.failure_modes:
+                fm_names = [fm.name for fm in pack.failure_modes[:3]]
+                tree.add(f"[dim]Failure modes: {', '.join(fm_names)}[/dim]")
+            if hasattr(pack, 'test_templates') and pack.test_templates:
+                tree.add(f"[dim]Test templates: {len(pack.test_templates)} applicable[/dim]")
+            if hasattr(pack, 'recipes') and pack.recipes:
+                tree.add(f"[dim]Recipes: {len(pack.recipes)} applicable[/dim]")
+            console.print(tree)
+    else:
+        console.print("  [yellow]No packs matched - using defaults[/yellow]")
+    
+    # Show assumptions
+    console.print("\n[bold]Assumptions Detected:[/bold]")
+    assumptions = _detect_assumptions(description)
+    if assumptions:
+        for assumption in assumptions:
+            console.print(f"  • {assumption}")
+    else:
+        console.print("  [dim]No specific assumptions detected[/dim]")
+    
+    # Show obligations covered
+    console.print("\n[bold]Obligations Covered:[/bold]")
+    if result.plan.failure_modes_covered:
+        for fm in result.plan.failure_modes_covered[:5]:
+            console.print(f"  • {fm}")
+        if len(result.plan.failure_modes_covered) > 5:
+            console.print(f"  [dim]... and {len(result.plan.failure_modes_covered) - 5} more[/dim]")
+    else:
+        console.print("  [dim]No specific obligations matched[/dim]")
+
+
+def _extract_keywords(description: str) -> dict[str, list[str]]:
+    """Extract domain keywords from description."""
+    keyword_map = {
+        "cache": ["edge-http-cache-correctness"],
+        "caching": ["edge-http-cache-correctness"],
+        "stale": ["edge-http-cache-correctness"],
+        "vary": ["edge-http-cache-correctness"],
+        "ttl": ["edge-http-cache-correctness"],
+        "routing": ["edge-http-cache-correctness"],
+        "backend": ["edge-http-cache-correctness"],
+        "latency": ["edge-latency-regression-observability"],
+        "p99": ["edge-latency-regression-observability"],
+        "timeout": ["edge-latency-regression-observability", "fault-injection-io"],
+        "performance": ["edge-latency-regression-observability"],
+        "fault": ["fault-injection-io"],
+        "injection": ["fault-injection-io"],
+        "failure": ["fault-injection-io"],
+        "retry": ["fault-injection-io"],
+        "circuit": ["fault-injection-io"],
+    }
+    
+    found = {}
+    desc_lower = description.lower()
+    for keyword, packs in keyword_map.items():
+        if keyword in desc_lower:
+            found[keyword] = packs
+    return found
+
+
+def _detect_assumptions(description: str) -> list[str]:
+    """Detect assumptions from description."""
+    assumptions = []
+    desc_lower = description.lower()
+    
+    if "nginx" in desc_lower:
+        assumptions.append("Proxy type: NGINX")
+    if "haproxy" in desc_lower:
+        assumptions.append("Proxy type: HAProxy")
+    if "envoy" in desc_lower:
+        assumptions.append("Proxy type: Envoy")
+    if "redis" in desc_lower:
+        assumptions.append("Cache backend: Redis")
+    if "production" in desc_lower:
+        assumptions.append("Environment: Production")
+    if "staging" in desc_lower:
+        assumptions.append("Environment: Staging")
+    if "api" in desc_lower or "/api/" in desc_lower:
+        assumptions.append("Scope: API endpoints")
+    if "cdn" in desc_lower:
+        assumptions.append("Scope: CDN/Edge")
+    
+    return assumptions
 
 
 def _write_starter_tests(tests_dir: Path, result) -> None:
