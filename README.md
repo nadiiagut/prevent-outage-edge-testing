@@ -74,7 +74,7 @@ poet gate report
 
 ## Quick Start — FOR MAINTAINERS
 
-Maintainers extract knowledge from legacy test suites and commit it for users.
+Maintainers extract knowledge from legacy test suites, review it, and commit curated patterns for users.
 
 ### 1. Learn from Existing Tests
 
@@ -82,22 +82,30 @@ Maintainers extract knowledge from legacy test suites and commit it for users.
 poet learn from-tests /path/to/legacy/tests/
 ```
 
+This writes raw patterns to `.poet/learned/` (git-ignored).
+
 ### 2. Review Extracted Knowledge
 
 ```bash
 poet learn show
-cat knowledge/learned/*.json
+cat .poet/learned/*.json
 ```
 
-### 3. Commit for Users
+### 3. Curate and Commit
+
+After human review, move validated patterns to `knowledge/curated/`:
 
 ```bash
-git add knowledge/learned/
-git commit -m "Add learned patterns from project X"
+# Review and sanitize (remove proprietary references)
+cp .poet/learned/extraction_*.json knowledge/curated/
+
+# Commit curated knowledge
+git add knowledge/curated/
+git commit -m "Add curated patterns from project X"
 git push
 ```
 
-**Users never need access to legacy tests** — they use the committed knowledge.
+**Users never need access to legacy tests** — they use the committed curated knowledge.
 
 ---
 
@@ -197,8 +205,10 @@ generated/
 ├── examples/              # Sample POET outputs — COMMITTED
 ├── demo/                  # Docker test environment — COMMITTED
 ├── knowledge/
-│   └── learned/           # Extracted patterns — GIT-IGNORED (maintainer-generated)
+│   ├── curated/           # Reviewed, reusable patterns — COMMITTED
+│   └── *.md               # Human review summaries — COMMITTED
 ├── .poet/                 # Runtime data — GIT-IGNORED (CLI creates)
+│   ├── learned/           # Raw extracted patterns (pre-review)
 │   ├── evidence/          # Captured evidence per test run
 │   └── reports/           # Gate reports (JSON, HTML)
 └── src/                   # CLI and library code — COMMITTED
@@ -211,7 +221,8 @@ generated/
 | `obligations/` | ✅ Yes | Project maintainers |
 | `packs/` | ✅ Yes | Project maintainers |
 | `examples/` | ✅ Yes | Project maintainers |
-| `knowledge/learned/` | ❌ No | `poet learn` (maintainers only) |
+| `knowledge/curated/` | ✅ Yes | Maintainers (after review) |
+| `.poet/learned/` | ❌ No | `poet learn` (raw output) |
 | `.poet/` | ❌ No | CLI at runtime |
 
 ---
@@ -274,7 +285,7 @@ poet learn show --section fixtures     # Show specific section
 3. Add tests for new functionality
 4. Submit a PR
 
-For knowledge contributions, run `poet learn from-tests` on your test suite and submit the sanitized `knowledge/learned/*.json` files.
+For knowledge contributions, run `poet learn from-tests` on your test suite, review and sanitize the output, then submit the curated `knowledge/curated/*.json` files.
 
 ---
 

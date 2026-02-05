@@ -273,7 +273,7 @@ poet learn from-tests ./more-tests/ --merge
 
 | Artifact | Location | Description |
 |----------|----------|-------------|
-| Learned patterns | `knowledge/learned/*.json` | Extracted knowledge (git-ignored) |
+| Learned patterns | `.poet/learned/*.json` | Raw extracted knowledge (git-ignored) |
 | Risk rules | Embedded in patterns | Pack recommendations |
 
 ### Limitations
@@ -291,14 +291,15 @@ poet learn from-tests /path/to/tests/
 
 # 2. Review
 poet learn show
-cat knowledge/learned/*.json
+cat .poet/learned/*.json
 
 # 3. Sanitize (remove proprietary references)
 # Edit JSON files manually or use sanitization script
 
-# 4. Commit for users
-git add knowledge/learned/
-git commit -m "Add learned patterns from project X"
+# 4. Curate and commit
+cp .poet/learned/extraction_*.json knowledge/curated/
+git add knowledge/curated/
+git commit -m "Add curated patterns from project X"
 ```
 
 ---
